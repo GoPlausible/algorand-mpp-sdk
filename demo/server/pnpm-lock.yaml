@@ -8,12 +8,12 @@ importers:
 
   .:
     dependencies:
-      '@algorand/mpp':
-        specifier: file:../..
-        version: file:../..(mppx@0.3.16(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(express@5.2.1)(hono@4.12.8)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.6(typescript@5.9.3)(zod@4.3.6)))
       '@algorandfoundation/algokit-utils':
         specifier: 10.0.0-alpha.39
         version: 10.0.0-alpha.39
+      '@goplausible/algorand-mpp':
+        specifier: file:../..
+        version: file:../..(mppx@0.3.16(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(express@5.2.1)(hono@4.12.8)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.6(typescript@5.9.3)(zod@4.3.6)))
       cors:
         specifier: ^2.8.5
         version: 2.8.6
@@ -44,12 +44,6 @@ packages:
 
   '@adraffy/ens-normalize@1.11.1':
     resolution: {integrity: sha512-nhCBV3quEgesuf7c7KYfperqSS14T8bYuvJ8PcLJp6znkZpFc0AuW4qBtr8eKVyPPe/8RSr7sglCWPU5eaxwKQ==}
-
-  '@algorand/mpp@file:../..':
-    resolution: {directory: ../.., type: directory}
-    engines: {node: '>=18'}
-    peerDependencies:
-      mppx: '>=0.3.15'
 
   '@algorandfoundation/algokit-utils@10.0.0-alpha.39':
     resolution: {integrity: sha512-nqyBdXsdgt5FIKLXMctJXFZWDgwQBfXowSacrIfLplMphRuKqWOV3AwTOB+QDvMMsCPAstf6ULmEBQLJcXlVtA==}
@@ -231,6 +225,12 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@goplausible/algorand-mpp@file:../..':
+    resolution: {directory: ../.., type: directory}
+    engines: {node: '>=18'}
+    peerDependencies:
+      mppx: '>=0.3.15'
 
   '@hono/node-server@1.19.11':
     resolution: {integrity: sha512-dr8/3zEaB+p0D2n/IUrlPF1HZm586qgJNXK1a9fhg/PzdtkK7Ksd5l312tJX2yBuALqDYBlG20QEbayqPyxn+g==}
@@ -893,11 +893,6 @@ snapshots:
 
   '@adraffy/ens-normalize@1.11.1': {}
 
-  '@algorand/mpp@file:../..(mppx@0.3.16(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(express@5.2.1)(hono@4.12.8)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.6(typescript@5.9.3)(zod@4.3.6)))':
-    dependencies:
-      '@algorandfoundation/algokit-utils': 10.0.0-alpha.39
-      mppx: 0.3.16(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(express@5.2.1)(hono@4.12.8)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.6(typescript@5.9.3)(zod@4.3.6))
-
   '@algorandfoundation/algokit-utils@10.0.0-alpha.39':
     dependencies:
       '@algorandfoundation/xhd-wallet-api': 2.0.0-canary.1
@@ -1012,6 +1007,11 @@ snapshots:
 
   '@esbuild/win32-x64@0.27.4':
     optional: true
+
+  '@goplausible/algorand-mpp@file:../..(mppx@0.3.16(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(express@5.2.1)(hono@4.12.8)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.6(typescript@5.9.3)(zod@4.3.6)))':
+    dependencies:
+      '@algorandfoundation/algokit-utils': 10.0.0-alpha.39
+      mppx: 0.3.16(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(express@5.2.1)(hono@4.12.8)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.6(typescript@5.9.3)(zod@4.3.6))
 
   '@hono/node-server@1.19.11(hono@4.12.8)':
     dependencies:
