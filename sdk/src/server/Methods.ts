@@ -5,7 +5,7 @@ import { charge as charge_ } from './Charge.js';
  *
  * @example
  * ```ts
- * import { Mppx, algorand } from '@algorand/mpp/server'
+ * import { Mppx, algorand } from '@goplausible/algorand-mpp/server'
  *
  * const mppx = Mppx.create({
  *   methods: [algorand.charge({ recipient: 'ALGO...', network: 'algorand:SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=' })],

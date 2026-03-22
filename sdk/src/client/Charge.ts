@@ -30,7 +30,7 @@ import {
  *
  * @example
  * ```ts
- * import { Mppx, algorand } from '@algorand/mpp/client'
+ * import { Mppx, algorand } from '@goplausible/algorand-mpp/client'
  *
  * const method = algorand.charge({ signer, algodUrl: 'https://testnet-api.4160.nodely.dev' })
  * const mppx = Mppx.create({ methods: [method] })

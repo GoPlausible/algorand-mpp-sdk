@@ -1,5 +1,14 @@
 {
-  "name": "algorand-mpp-demo-app",
+  "name": "@goplausible/algorand-mpp-demo-app",
+  "version": "0.1.0",
+  "description": "Demo React app for the Algorand MPP SDK",
+  "author": "GoPlausible <dev@goplausible.com> (https://goplausible.com)",
+  "homepage": "https://github.com/GoPlausible/algorand-mpp-sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GoPlausible/algorand-mpp-sdk",
+    "directory": "demo/app"
+  },
   "private": true,
   "type": "module",
   "scripts": {
@@ -18,7 +27,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.13.1",
-    "@algorand/mpp": "file:../..",
+    "@goplausible/algorand-mpp": "file:../..",
     "@algorandfoundation/algokit-utils": "10.0.0-alpha.39",
     "mppx": "^0.3.15"
   },

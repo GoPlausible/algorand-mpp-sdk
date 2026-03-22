@@ -1,4 +1,4 @@
-import { Mppx, algorand } from '@algorand/mpp/client'
+import { Mppx, algorand } from '@goplausible/algorand-mpp/client'
 
 // The SDK's client signer matches use-wallet's signTransactions:
 //   (txns: Uint8Array[], indexesToSign?: number[]) => Promise<(Uint8Array | null)[]>

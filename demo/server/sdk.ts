@@ -1,1 +1,1 @@
-export { Mppx, algorand, Store } from '@algorand/mpp/server'
+export { Mppx, algorand, Store } from '@goplausible/algorand-mpp/server'

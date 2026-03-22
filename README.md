@@ -2,7 +2,7 @@
 
 **Machine Payments Protocol (MPP) for Algorand** — HTTP-native micropayments using `402 Payment Required`.
 
-[![npm](https://img.shields.io/npm/v/@algorand/mpp)](https://www.npmjs.com/package/@algorand/mpp)
+[![npm](https://img.shields.io/npm/v/@goplausible/algorand-mpp)](https://www.npmjs.com/package/@goplausible/algorand-mpp)
 [![License](https://img.shields.io/github/license/GoPlausible/algorand-mpp-sdk)](LICENSE)
 
 ---
@@ -42,9 +42,9 @@ Built on [`@algorandfoundation/algokit-utils`](https://github.com/algorandfounda
 ## Installation
 
 ```bash
-npm install @algorand/mpp mppx
+npm install @goplausible/algorand-mpp mppx
 # or
-pnpm add @algorand/mpp mppx
+pnpm add @goplausible/algorand-mpp mppx
 ```
 
 ## Quick Start
@@ -53,7 +53,7 @@ pnpm add @algorand/mpp mppx
 
 ```ts
 import express from 'express'
-import { Mppx, algorand } from '@algorand/mpp/server'
+import { Mppx, algorand } from '@goplausible/algorand-mpp/server'
 
 const mppx = Mppx.create({
   secretKey: process.env.MPP_SECRET_KEY,
@@ -92,7 +92,7 @@ app.get('/api/data', async (req, res) => {
 ### Client (Browser with use-wallet)
 
 ```ts
-import { Mppx, algorand } from '@algorand/mpp/client'
+import { Mppx, algorand } from '@goplausible/algorand-mpp/client'
 
 // signTransactions from @txnlab/use-wallet
 const method = algorand.charge({

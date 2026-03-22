@@ -40,7 +40,7 @@ import {
  *
  * @example
  * ```ts
- * import { Mppx, algorand } from '@algorand/mpp/server'
+ * import { Mppx, algorand } from '@goplausible/algorand-mpp/server'
  *
  * const mppx = Mppx.create({
  *   methods: [algorand.charge({
