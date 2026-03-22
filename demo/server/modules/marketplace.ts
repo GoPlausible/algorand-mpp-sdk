@@ -64,6 +64,24 @@ export function registerMarketplace(
 
     const referrer = req.query.referrer as string | undefined
 
+    // Validate referrer is opted in to USDC before including in splits
+    if (referrer) {
+      try {
+        const acctRes = await fetch(`${TESTNET_ALGOD_URL}/v2/accounts/${referrer}`)
+        const acctData = (await acctRes.json()) as { assets?: Array<{ 'asset-id': number }> }
+        const hasUsdc = acctData.assets?.some((a) => a['asset-id'] === Number(USDC_ASA_ID))
+        if (!hasUsdc) {
+          return res.status(400).json({
+            error: 'Referrer not opted in to USDC',
+            detail: `Account ${referrer} must opt in to ASA ${USDC_ASA_ID} (TestNet USDC) before receiving referral payments.`,
+            faucet: 'https://faucet.circle.com/',
+          })
+        }
+      } catch {
+        return res.status(400).json({ error: 'Could not verify referrer account' })
+      }
+    }
+
     // Compute splits
     const platformFee = Math.floor((product.price * PLATFORM_FEE_BPS) / 10_000)
     const referralFee = referrer ? Math.floor((product.price * REFERRAL_FEE_BPS) / 10_000) : 0
