@@ -1,0 +1,46 @@
+{
+  "name": "@goplausible/algorand-mpp-cloudflare-demo",
+  "version": "0.1.0",
+  "description": "Cloudflare Workers demo for the Algorand MPP SDK",
+  "author": "GoPlausible <dev@goplausible.com> (https://goplausible.com)",
+  "homepage": "https://github.com/GoPlausible/algorand-mpp-sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GoPlausible/algorand-mpp-sdk",
+    "directory": "demo/cloudflare-demo-app"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build:app": "vite build",
+    "build": "pnpm build:app && wrangler deploy --dry-run",
+    "deploy": "pnpm build:app && wrangler deploy",
+    "preview": "wrangler dev --local"
+  },
+  "dependencies": {
+    "hono": "^4.7.0",
+    "@goplausible/algorand-mpp": "file:../..",
+    "@algorandfoundation/algokit-utils": "10.0.0-alpha.39",
+    "mppx": "^0.3.15",
+    "@txnlab/use-wallet": "^4.3.1",
+    "@txnlab/use-wallet-react": "^4.3.1",
+    "@perawallet/connect": "^1.4.2",
+    "@blockshake/defly-connect": "^1.2.1",
+    "@walletconnect/sign-client": "^2.23.1",
+    "lute-connect": "^1.6.3",
+    "algosdk": "^3.5.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.13.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250620.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0",
+    "wrangler": "^4.0.0"
+  }
+}
