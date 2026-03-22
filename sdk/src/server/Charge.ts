@@ -212,12 +212,6 @@ async function verifyTransaction(
         d.type === 'signed' ? d.signed!.txn : d.unsigned!
     );
 
-    // Debug: log group IDs
-    for (let i = 0; i < transactions.length; i++) {
-        const txn = transactions[i];
-        console.log(`  txn[${i}] type=${decoded[i].type} sender=${txn.sender} group=${txn.group ? 'yes' : 'NO'}`);
-    }
-
     // Verify all transactions share the same group ID.
     verifyGroupId(transactions);
 

@@ -6,6 +6,12 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     envPrefix: 'VITE_',
+    resolve: {
+      // Force Vite to use the ESM (.mjs) build of algokit-utils.
+      // The package declares "type": "commonjs" which causes Vite to
+      // resolve the CJS build by default, breaking transaction encoding.
+      conditions: ['import'],
+    },
     server: {
       port: Number(env.VITE_PORT ?? 5173),
       proxy: {

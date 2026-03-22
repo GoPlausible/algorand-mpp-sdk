@@ -92,9 +92,6 @@ export function buildFeePayerTransaction(params: {
 }): Transaction {
     const { feePayerKey, groupSize, suggestedParams } = params;
     const totalFee = BigInt(groupSize) * MIN_TXN_FEE;
-    const senderAddr = Address.fromString(feePayerKey);
-    console.log('[mpp-build] Address.fromString input:', feePayerKey, 'output:', senderAddr?.toString());
-
     return new Transaction({
         type: TransactionType.Payment,
         sender: Address.fromString(feePayerKey),
@@ -149,13 +146,12 @@ export function buildChargeGroup(params: {
     const note = textEncoder.encode(noteStr);
 
     // Fee payer transaction (index 0 when present).
-    console.log('[mpp-build] useServerFeePayer:', useServerFeePayer, 'feePayerKey:', feePayerKey);
     if (useServerFeePayer && feePayerKey) {
         // The group size is: 1 (fee payer) + 1 (primary) + splits count
         const groupSize = 1 + 1 + (splits?.length ?? 0);
-        const fpTxn = buildFeePayerTransaction({ feePayerKey, groupSize, suggestedParams });
-        console.log('[mpp-build] fee payer txn sender:', fpTxn.sender?.toString());
-        transactions.push(fpTxn);
+        transactions.push(
+            buildFeePayerTransaction({ feePayerKey, groupSize, suggestedParams }),
+        );
     }
 
     // Primary payment transaction.

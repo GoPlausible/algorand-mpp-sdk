@@ -1,72 +1,17 @@
 import { Mppx, algorand } from '@algorand/mpp/client'
-import algosdk from 'algosdk'
 
-// The SDK's client signer matches use-wallet's signTransactions exactly:
+// The SDK's client signer matches use-wallet's signTransactions:
 //   (txns: Uint8Array[], indexesToSign?: number[]) => Promise<(Uint8Array | null)[]>
-type UseWalletSignTransactions = <T extends algosdk.Transaction[] | Uint8Array[]>(txnGroup: T | T[], indexesToSign?: number[]) => Promise<(Uint8Array | null)[]>
-
 type Signer = (txns: Uint8Array[], indexesToSign?: number[]) => Promise<(Uint8Array | null)[]>
-
-// algosdk-based transaction encoder for browser environments.
-// algokit-utils' encodeTransactionRaw produces corrupted bytes in Vite bundles.
-// This encoder uses algosdk which works correctly in the browser.
-export function algosdkEncoder(txn: any): Uint8Array {
-  // The Transaction object from algokit-utils has all the fields we need.
-  // We manually build an algosdk-compatible msgpack object.
-  const obj: Record<string, unknown> = {
-    type: txn.type,
-    snd: txn.sender?.publicKey ?? new Uint8Array(32),
-    fee: Number(txn.fee ?? 0),
-    fv: Number(txn.firstValid),
-    lv: Number(txn.lastValid),
-    gh: txn.genesisHash,
-    gen: txn.genesisId,
-  }
-
-  if (txn.group) obj.grp = txn.group
-  if (txn.note && txn.note.length > 0) obj.note = txn.note
-
-  // Payment fields
-  if (txn.payment) {
-    obj.rcv = txn.payment.receiver?.publicKey ?? new Uint8Array(32)
-    obj.amt = Number(txn.payment.amount ?? 0)
-  }
-
-  // Asset transfer fields
-  if (txn.assetTransfer) {
-    obj.arcv = txn.assetTransfer.receiver?.publicKey ?? new Uint8Array(32)
-    obj.aamt = Number(txn.assetTransfer.amount ?? 0)
-    obj.xaid = Number(txn.assetTransfer.assetId)
-  }
-
-  // Sort keys alphabetically (Algorand canonical encoding)
-  const sorted: Record<string, unknown> = {}
-  for (const key of Object.keys(obj).sort()) {
-    const val = obj[key]
-    // Skip zero/empty values (Algorand canonical: omit defaults)
-    if (val === 0 || val === '' || val === undefined || val === null) continue
-    if (val instanceof Uint8Array && val.length === 0) continue
-    sorted[key] = val
-  }
-
-  const encoded = algosdk.msgpackRawEncode(sorted) as Uint8Array
-
-  // Verify round-trip
-  const verify = algosdk.msgpackRawDecode(encoded) as Record<string, unknown>
-  const sndBytes = verify['snd'] as Uint8Array | undefined
-  console.log('[algosdkEncoder] encoded keys:', Object.keys(verify), 'snd bytes:', sndBytes?.length, 'has grp:', 'grp' in verify)
-
-  return encoded
-}
 
 // Wrap use-wallet's signTransactions.
 // For null entries (fee payer txns the wallet can't sign), return the
-// properly encoded unsigned bytes.
+// original encoded unsigned bytes so the server can co-sign them.
+type UseWalletSignTransactions = (txnGroup: Uint8Array[], indexesToSign?: number[]) => Promise<(Uint8Array | null)[]>
+
 export function createSigner(signTransactions: UseWalletSignTransactions): Signer {
   return async (txns: Uint8Array[], indexesToSign?: number[]) => {
     const signed = await signTransactions(txns, indexesToSign)
-    console.log('[createSigner] wallet returned:', signed.map((s, i) => `[${i}]=${s ? s.length + 'B' : 'null'}`).join(' '))
-    // For null entries, return the original bytes (already encoded by algosdkEncoder)
     return signed.map((s, i) => s ?? txns[i])
   }
 }
@@ -122,7 +67,6 @@ export function createMppxClient(signer: Signer, senderAddress: string) {
     signer,
     senderAddress,
     algodUrl: TESTNET_ALGOD_URL,
-    encoder: algosdkEncoder,
     onProgress(event) {
       progressCallback?.(event as ProgressEvent)
     },

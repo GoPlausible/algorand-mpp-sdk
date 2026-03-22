@@ -70,8 +70,6 @@ export function charge(parameters: charge.Parameters) {
 
             const useServerFeePayer = serverPaysFees && feePayerKey && !broadcast;
 
-            console.log('[mpp-client] challenge methodDetails:', JSON.stringify({ serverPaysFees, feePayerKey, useServerFeePayer }));
-            console.log('[mpp-client] will build group with sender:', senderAddress, 'feePayerKey:', feePayerKey);
 
             // Resolve suggested params.
             const txnParams = await resolveSuggestedParams(

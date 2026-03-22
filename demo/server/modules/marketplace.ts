@@ -16,17 +16,17 @@ const PRODUCTS: Record<
 > = {
   'algo-hoodie': {
     name: 'Algorand Hoodie',
-    price: 2_000_000, // 2 USDC
+    price: 170_000, // 0.17 USDC
     description: 'Premium Algorand-branded hoodie',
   },
   'validator-mug': {
     name: 'Validator Mug',
-    price: 1_000_000, // 1 USDC
+    price: 150_000, // 0.15 USDC
     description: 'Ceramic mug for node operators',
   },
   'nft-sticker-pack': {
     name: 'NFT Sticker Pack',
-    price: 500_000, // 0.50 USDC
+    price: 100_000, // 0.10 USDC
     description: 'Holographic sticker collection',
   },
 }
