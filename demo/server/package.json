@@ -1,0 +1,24 @@
+{
+  "name": "algorand-mpp-demo-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file=.env --clear-screen=false index.ts",
+    "build": "tsc",
+    "start": "node --env-file=.env dist/index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.0.0",
+    "@algorand/mpp": "file:../..",
+    "@algorandfoundation/algokit-utils": "10.0.0-alpha.39",
+    "mppx": "^0.3.15"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

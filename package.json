@@ -1,0 +1,69 @@
+{
+  "name": "@algorand/mpp",
+  "version": "0.1.0-beta.1",
+  "description": "Algorand payment method for the MPP protocol",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GoPlausible/algorand-mpp-sdk"
+  },
+  "type": "module",
+  "packageManager": "pnpm@10.14.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "default": "./dist/server/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "default": "./dist/client/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "sdk/src/[!_]*"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.config.integration.ts",
+    "test:all": "pnpm test && pnpm test:integration",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint sdk/src --ext .ts",
+    "lint:fix": "eslint sdk/src --ext .ts --fix",
+    "format": "prettier --write \"sdk/src/**/*.ts\"",
+    "format:check": "prettier --check \"sdk/src/**/*.ts\"",
+    "demo:install": "cd demo/server && pnpm install && cd ../app && pnpm install",
+    "demo:server": "cd demo/server && pnpm dev",
+    "demo:server:build": "cd demo/server && pnpm build",
+    "demo:app": "cd demo/app && pnpm dev",
+    "demo:app:build": "cd demo/app && pnpm build",
+    "demo:build": "pnpm demo:server:build && pnpm demo:app:build",
+    "demo:start": "cd demo/server && pnpm start",
+    "demo:dev": "pnpm demo:server & pnpm demo:app"
+  },
+  "dependencies": {
+    "@algorandfoundation/algokit-utils": "10.0.0-alpha.39"
+  },
+  "peerDependencies": {
+    "mppx": ">=0.3.15"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.57.1",
+    "@typescript-eslint/parser": "^8.57.1",
+    "eslint": "^9.39.4",
+    "mppx": "^0.3.15",
+    "prettier": "^3.8.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.0"
+  }
+}
