@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { useWallet, useNetwork } from '@txnlab/use-wallet-react'
+import { useWallet } from '@txnlab/use-wallet-react'
 import WalletConnect from './components/WalletConnect.js'
 import WalletModal from './components/WalletModal.js'
 import CodeBlock from './components/CodeBlock.js'
@@ -12,12 +12,12 @@ import {
   type Step,
   type Balances,
 } from './wallet.js'
-import { useWindowWidth } from './hooks.js'
+import { useWindowWidth, useNfd } from './hooks.js'
+import { resolveToAddress, isNfdName } from './nfd.js'
 import type { LogLine, Kind, MobileTab } from './types.js'
 
 export default function App() {
   const { activeAccount, activeWallet, signTransactions } = useWallet()
-  const { activeNetwork } = useNetwork()
   const width = useWindowWidth()
   const isMobile = width < 768
 
@@ -35,17 +35,31 @@ export default function App() {
     balance: number
   } | null>(null)
   const [products, setProducts] = useState<Array<{ id: string; name: string; description: string; price: string }>>([])
+  const [serverNetwork, setServerNetwork] = useState<string>('testnet')
   const logRef = useRef<HTMLDivElement>(null)
   const logId = useRef(0)
 
   const endpoint = ENDPOINTS[selectedIdx]
   const senderAddress = activeAccount?.address ?? ''
+  const senderNfd = useNfd(senderAddress || undefined)
 
-  // Fetch marketplace products
+  // Fetch marketplace products and server config
   useEffect(() => {
     fetch('/api/v1/marketplace/products')
       .then((r) => r.json())
       .then((data) => setProducts(data as typeof products))
+      .catch(() => {})
+    fetch('/api/v1/health')
+      .then((r) => r.json())
+      .then((data: { network?: string }) => {
+        if (data.network) {
+          // Extract human-readable name from CAIP-2 identifier
+          const caip2 = data.network
+          if (caip2.includes('SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=')) setServerNetwork('testnet')
+          else if (caip2.includes('wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=')) setServerNetwork('mainnet')
+          else setServerNetwork(caip2)
+        }
+      })
       .catch(() => {})
   }, [])
 
@@ -79,7 +93,21 @@ export default function App() {
   const handleSend = async () => {
     if (running || !senderAddress) return
     setRunning(true)
-    const url = buildUrl(endpoint, paramValues)
+
+    // Resolve NFD names in params before building URL
+    const resolvedParams = { ...paramValues }
+    if (resolvedParams.referrer && isNfdName(resolvedParams.referrer)) {
+      const resolved = await resolveToAddress(resolvedParams.referrer)
+      if (resolved) {
+        resolvedParams.referrer = resolved
+      } else {
+        addLog(`Could not resolve NFD: ${resolvedParams.referrer}`, 'error')
+        setRunning(false)
+        return
+      }
+    }
+
+    const url = buildUrl(endpoint, resolvedParams)
     const signer = createSigner(signTransactions)
 
     for await (const step of payAndFetch(url, signer, senderAddress)) {
@@ -153,7 +181,7 @@ export default function App() {
             <img src={activeWallet.metadata.icon} alt="" style={{ width: 18, height: 18, borderRadius: 4 }} />
           )}
           <span style={{ color: '#00D4AA', fontSize: 11 }}>
-            {senderAddress.slice(0, 4)}...{senderAddress.slice(-4)}
+            {senderNfd ?? `${senderAddress.slice(0, 4)}...${senderAddress.slice(-4)}`}
           </span>
           <span style={{ color: '#888', fontSize: 10 }}>
             {balances !== null ? `${balances.algo.toFixed(2)} A` : '...'}
@@ -161,7 +189,7 @@ export default function App() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ color: '#666', fontSize: 9, textTransform: 'uppercase' as const }}>
-            {activeNetwork ?? 'testnet'}
+            {serverNetwork}
           </span>
           <button style={s.walletBtn} onClick={() => setShowWallet(true)}>
             info
@@ -345,7 +373,7 @@ export default function App() {
               onChange={(e) =>
                 setParamValues((v) => ({ ...v, [p.name]: e.target.value }))
               }
-              placeholder={p.default}
+              placeholder={p.name === 'referrer' ? 'address or name.algo' : p.default}
             />
           </div>
         ))}
@@ -416,7 +444,7 @@ export default function App() {
             </button>
           ))}
           <button style={s.mobileTab} onClick={() => setShowWallet(true)}>
-            {senderAddress.slice(0, 4)}..{senderAddress.slice(-3)}
+            {senderNfd ?? `${senderAddress.slice(0, 4)}..${senderAddress.slice(-3)}`}
           </button>
         </div>
         <div style={{ flex: 1, overflow: 'auto' }}>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useWallet } from '@txnlab/use-wallet-react'
 import { getBalances, getAlgoBalance, type Balances } from '../wallet.js'
+import { useNfd } from '../hooks.js'
 
 type Props = {
   onClose: () => void
@@ -13,6 +14,7 @@ export default function WalletModal({ onClose, onDisconnect }: Props) {
   const [feePayerAlgo, setFeePayerAlgo] = useState<number | null>(null)
 
   const address = activeAccount?.address ?? ''
+  const nfdName = useNfd(address || undefined)
 
   useEffect(() => {
     if (address) {
@@ -46,6 +48,11 @@ export default function WalletModal({ onClose, onDisconnect }: Props) {
             <label style={s.label}>Address</label>
             <button style={s.copyBtn} onClick={copyAddress}>copy</button>
           </div>
+          {nfdName && (
+            <div style={{ color: '#6F42C1', fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
+              {nfdName}
+            </div>
+          )}
           <div style={s.mono}>{address}</div>
         </div>
 
