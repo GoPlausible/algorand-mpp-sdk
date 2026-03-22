@@ -170,6 +170,13 @@ export default function App() {
 
   const sidebar = (
     <div style={s.sidebar}>
+      <div style={s.brandBar}>
+        <img src="/algorand-logomark-blue-RGB.png" alt="Algorand" style={s.brandLogo} />
+        <div>
+          <div style={s.brandTitle}>Algorand <span style={{ color: '#6F42C1' }}>MPP</span></div>
+          <div style={s.brandSub}>Machine Payments Protocol</div>
+        </div>
+      </div>
       <div style={s.sidebarHeader}>
         <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>
           Endpoints
@@ -502,6 +509,32 @@ const s: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     background: '#0D0D0D',
+  },
+  brandBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '14px 16px',
+    borderBottom: '1px solid #222',
+    background: '#0A0A0A',
+  },
+  brandLogo: {
+    width: 28,
+    height: 28,
+    filter: 'drop-shadow(0 0 8px rgba(0, 172, 212, 0.3))',
+  },
+  brandTitle: {
+    fontSize: 14,
+    fontWeight: 700,
+    color: '#fff',
+    lineHeight: 1.1,
+  },
+  brandSub: {
+    fontSize: 8,
+    color: '#666',
+    letterSpacing: 1,
+    textTransform: 'uppercase' as const,
+    marginTop: 2,
   },
   sidebarHeader: {
     display: 'flex',
