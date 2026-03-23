@@ -1,4 +1,4 @@
-import { charge as charge_ } from './Charge.js';
+import { charge as charge_ } from "./Charge.js";
 
 /**
  * Creates Algorand payment methods for usage on the server.
@@ -13,12 +13,15 @@ import { charge as charge_ } from './Charge.js';
  * ```
  */
 export const algorand: {
-    (parameters: algorand.Parameters): ReturnType<typeof charge_>;
-    charge: typeof charge_;
-} = Object.assign((parameters: algorand.Parameters) => algorand.charge(parameters), {
+  (parameters: algorand.Parameters): ReturnType<typeof charge_>;
+  charge: typeof charge_;
+} = Object.assign(
+  (parameters: algorand.Parameters) => algorand.charge(parameters),
+  {
     charge: charge_,
-});
+  },
+);
 
 export declare namespace algorand {
-    type Parameters = charge_.Parameters;
+  type Parameters = charge_.Parameters;
 }

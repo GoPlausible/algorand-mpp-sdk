@@ -1,4 +1,4 @@
-import { charge as charge_ } from './Charge.js';
+import { charge as charge_ } from "./Charge.js";
 
 /**
  * Creates an Algorand `charge` method for usage on the client.
@@ -17,12 +17,12 @@ import { charge as charge_ } from './Charge.js';
  * ```
  */
 export const algorand: {
-    (parameters: algorand.Parameters): ReturnType<typeof charge_>;
-    charge: typeof charge_;
+  (parameters: algorand.Parameters): ReturnType<typeof charge_>;
+  charge: typeof charge_;
 } = Object.assign((parameters: algorand.Parameters) => charge_(parameters), {
-    charge: charge_,
+  charge: charge_,
 });
 
 export declare namespace algorand {
-    type Parameters = charge_.Parameters;
+  type Parameters = charge_.Parameters;
 }
