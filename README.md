@@ -8,6 +8,8 @@
 
 ---
 
+Try it live: https://mpp.goplausible.xyz (TestNet)
+
 ## What is MPP?
 
 The Machine Payments Protocol (MPP) enables any HTTP API to charge for access using standard HTTP headers. When a client requests a paid resource, the server responds with `402 Payment Required` and a payment challenge. The client pays on-chain, retries the request with proof of payment, and receives the resource.
