@@ -19,7 +19,7 @@ Built on [`@algorandfoundation/algokit-utils`](https://github.com/algorandfounda
 | [Payment Flows](./payment-flows.md) | Pull mode, push mode, fee sponsorship, and splits |
 | [Demo Guide](./demo.md) | Demo application features, scenarios, and setup |
 | [Demo README](../demo/README.md) | Demo quick start, configuration, and API reference |
-| [Full Specification](../specs/draft-algorand-charge-00.md) | Complete IETF-style specification document |
+| [Full Specification](../specs/draft-algorand-charge-00.md) | Complete Algorand MPP IETF-style specification document |
 
 ---
 
