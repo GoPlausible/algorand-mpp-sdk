@@ -1,5 +1,6 @@
 # Algorand MPP SDK
-<img width="3362" height="1248" alt="algorand mpp sdk" src="https://raw.githubusercontent.com/GoPlausible/algorand-mpp-sdk/main/algorand%20mpp%20sdk.png" />
+<img width="3362" height="1248" alt="algorand mpp sdk" src="https://github.com/user-attachments/assets/e82c7a2e-9ab9-45a6-abbb-73a122d80f70" />
+
 
 **Machine Payments Protocol (MPP) for Algorand** — HTTP-native micropayments using `402 Payment Required`.
 
