@@ -140,8 +140,8 @@ algorand.charge({
 ### Setup
 
 ```bash
-git clone https://github.com/GoPlausible/algorand-mpp-sdk-sdk.git
-cd algorand-mpp-sdk-sdk
+git clone https://github.com/GoPlausible/algorand-mpp-sdk.git
+cd algorand-mpp-sdk
 pnpm install
 ```
 
@@ -214,7 +214,7 @@ pnpm demo:start         # Start production server
 ## Project Structure
 
 ```
-algorand-mpp-sdk-sdk/
+algorand-mpp-sdk/
 ├── sdk/src/                # SDK source code
 │   ├── client/             # Client-side charge (browser/Node)
 │   ├── server/             # Server-side charge (verify, co-sign, broadcast)

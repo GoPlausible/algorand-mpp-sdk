@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "description": "Cloudflare Workers demo for the Algorand MPP SDK",
   "author": "GoPlausible <dev@goplausible.com> (https://goplausible.com)",
-  "homepage": "https://github.com/GoPlausible/algorand-mpp-sdk-sdk#readme",
+  "homepage": "https://github.com/GoPlausible/algorand-mpp-sdk#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/GoPlausible/algorand-mpp-sdk-sdk",
+    "url": "https://github.com/GoPlausible/algorand-mpp-sdk",
     "directory": "demo/cloudflare-demo-app"
   },
   "private": true,

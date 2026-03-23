@@ -1,12 +1,12 @@
 {
   "name": "@goplausible/algorand-mpp-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Algorand payment method SDK for the MPP protocol",
   "author": "GoPlausible <dev@goplausible.com> (https://goplausible.com)",
-  "homepage": "https://github.com/GoPlausible/algorand-mpp-sdk-sdk#readme",
+  "homepage": "https://github.com/GoPlausible/algorand-mpp-sdk#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/GoPlausible/algorand-mpp-sdk-sdk"
+    "url": "https://github.com/GoPlausible/algorand-mpp-sdk"
   },
   "type": "module",
   "packageManager": "pnpm@10.14.0",
