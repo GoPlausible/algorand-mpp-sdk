@@ -24,7 +24,7 @@ Built on [`@algorandfoundation/algokit-utils`](https://github.com/algorandfounda
 
 ## Quick Links
 
-- [GitHub Repository](https://github.com/GoPlausible/algorand-mpp-sdk)
+- [GitHub Repository](https://github.com/GoPlausible/algorand-mpp-sdk-sdk)
 - [MPP Specification](https://paymentauth.org)
 - [Algorand Developer Docs](https://dev.algorand.co)
 - [GoPlausible](https://goplausible.com)

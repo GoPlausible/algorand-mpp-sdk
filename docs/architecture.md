@@ -3,7 +3,7 @@
 ## Package Structure
 
 ```
-@goplausible/algorand-mpp
+@goplausible/algorand-mpp-sdk
 ├── sdk/src/
 │   ├── index.ts              # Root exports (shared types)
 │   ├── Methods.ts            # Shared charge method schema (zod)
@@ -35,13 +35,13 @@ The SDK provides three entry points:
 
 ```ts
 // Server-side (Express, Hono, etc.)
-import { Mppx, algorand, Store } from '@goplausible/algorand-mpp/server'
+import { Mppx, algorand, Store } from '@goplausible/algorand-mpp-sdk/server'
 
 // Client-side (browser, React, etc.)
-import { Mppx, algorand } from '@goplausible/algorand-mpp/client'
+import { Mppx, algorand } from '@goplausible/algorand-mpp-sdk/client'
 
 // Shared types and method schema
-import { charge } from '@goplausible/algorand-mpp'
+import { charge } from '@goplausible/algorand-mpp-sdk'
 ```
 
 ## Server-Side Architecture
@@ -49,7 +49,7 @@ import { charge } from '@goplausible/algorand-mpp'
 ### Creating a Paid Endpoint
 
 ```ts
-import { Mppx, algorand } from '@goplausible/algorand-mpp/server'
+import { Mppx, algorand } from '@goplausible/algorand-mpp-sdk/server'
 
 const mppx = Mppx.create({
   secretKey: 'hmac-secret-for-challenges',
@@ -99,7 +99,7 @@ algorand.charge() server factory
 ### Creating a Payment Client
 
 ```ts
-import { Mppx, algorand } from '@goplausible/algorand-mpp/client'
+import { Mppx, algorand } from '@goplausible/algorand-mpp-sdk/client'
 
 const method = algorand.charge({
   signer: signTransactions,   // use-wallet's signTransactions

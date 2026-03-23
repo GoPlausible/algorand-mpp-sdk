@@ -243,15 +243,15 @@ export default function App() {
           <button style={{ background: 'none', border: 'none', color: t.muted, fontSize: 18, cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace' }} onClick={() => setShowInfo(false)}>&times;</button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <a href="https://github.com/GoPlausible/algorand-mpp-sdk" target="_blank" rel="noopener" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: t.bgAlt, border: `1px solid ${t.border}`, borderRadius: 8, color: t.text, textDecoration: 'none', fontSize: 12 }}>
+          <a href="https://github.com/GoPlausible/algorand-mpp-sdk-sdk" target="_blank" rel="noopener" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: t.bgAlt, border: `1px solid ${t.border}`, borderRadius: 8, color: t.text, textDecoration: 'none', fontSize: 12 }}>
             <span style={{ fontSize: 16 }}>&#128193;</span>
-            <div><div style={{ fontWeight: 600 }}>GitHub Repository</div><div style={{ color: t.muted, fontSize: 10, marginTop: 2 }}>GoPlausible/algorand-mpp-sdk</div></div>
+            <div><div style={{ fontWeight: 600 }}>GitHub Repository</div><div style={{ color: t.muted, fontSize: 10, marginTop: 2 }}>GoPlausible/algorand-mpp-sdk-sdk</div></div>
           </a>
-          <a href="https://www.npmjs.com/package/@goplausible/algorand-mpp" target="_blank" rel="noopener" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: t.bgAlt, border: `1px solid ${t.border}`, borderRadius: 8, color: t.text, textDecoration: 'none', fontSize: 12 }}>
+          <a href="https://www.npmjs.com/package/@goplausible/algorand-mpp-sdk" target="_blank" rel="noopener" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: t.bgAlt, border: `1px solid ${t.border}`, borderRadius: 8, color: t.text, textDecoration: 'none', fontSize: 12 }}>
             <span style={{ fontSize: 16 }}>&#128230;</span>
-            <div><div style={{ fontWeight: 600 }}>NPM Package</div><div style={{ color: t.muted, fontSize: 10, marginTop: 2 }}>@goplausible/algorand-mpp</div></div>
+            <div><div style={{ fontWeight: 600 }}>NPM Package</div><div style={{ color: t.muted, fontSize: 10, marginTop: 2 }}>@goplausible/algorand-mpp-sdk</div></div>
           </a>
-          <a href="https://github.com/GoPlausible/algorand-mpp-sdk/tree/main/docs" target="_blank" rel="noopener" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: t.bgAlt, border: `1px solid ${t.border}`, borderRadius: 8, color: t.text, textDecoration: 'none', fontSize: 12 }}>
+          <a href="https://github.com/GoPlausible/algorand-mpp-sdk-sdk/tree/main/docs" target="_blank" rel="noopener" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: t.bgAlt, border: `1px solid ${t.border}`, borderRadius: 8, color: t.text, textDecoration: 'none', fontSize: 12 }}>
             <span style={{ fontSize: 16 }}>&#128214;</span>
             <div><div style={{ fontWeight: 600 }}>Documentation</div><div style={{ color: t.muted, fontSize: 10, marginTop: 2 }}>Architecture, flows, and guides</div></div>
           </a>

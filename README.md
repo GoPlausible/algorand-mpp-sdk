@@ -2,8 +2,8 @@
 
 **Machine Payments Protocol (MPP) for Algorand** — HTTP-native micropayments using `402 Payment Required`.
 
-[![npm](https://img.shields.io/npm/v/@goplausible/algorand-mpp)](https://www.npmjs.com/package/@goplausible/algorand-mpp)
-[![License](https://img.shields.io/github/license/GoPlausible/algorand-mpp-sdk)](LICENSE)
+[![npm](https://img.shields.io/npm/v/@goplausible/algorand-mpp-sdk)](https://www.npmjs.com/package/@goplausible/algorand-mpp-sdk)
+[![License](https://img.shields.io/github/license/GoPlausible/algorand-mpp-sdk-sdk)](LICENSE)
 
 ---
 
@@ -42,9 +42,9 @@ Built on [`@algorandfoundation/algokit-utils`](https://github.com/algorandfounda
 ## Installation
 
 ```bash
-npm install @goplausible/algorand-mpp mppx
+npm install @goplausible/algorand-mpp-sdk mppx
 # or
-pnpm add @goplausible/algorand-mpp mppx
+pnpm add @goplausible/algorand-mpp-sdk mppx
 ```
 
 ## Quick Start
@@ -53,7 +53,7 @@ pnpm add @goplausible/algorand-mpp mppx
 
 ```ts
 import express from 'express'
-import { Mppx, algorand } from '@goplausible/algorand-mpp/server'
+import { Mppx, algorand } from '@goplausible/algorand-mpp-sdk/server'
 
 const mppx = Mppx.create({
   secretKey: process.env.MPP_SECRET_KEY,
@@ -92,7 +92,7 @@ app.get('/api/data', async (req, res) => {
 ### Client (Browser with use-wallet)
 
 ```ts
-import { Mppx, algorand } from '@goplausible/algorand-mpp/client'
+import { Mppx, algorand } from '@goplausible/algorand-mpp-sdk/client'
 
 // signTransactions from @txnlab/use-wallet
 const method = algorand.charge({
@@ -139,8 +139,8 @@ algorand.charge({
 ### Setup
 
 ```bash
-git clone https://github.com/GoPlausible/algorand-mpp-sdk.git
-cd algorand-mpp-sdk
+git clone https://github.com/GoPlausible/algorand-mpp-sdk-sdk.git
+cd algorand-mpp-sdk-sdk
 pnpm install
 ```
 
@@ -213,7 +213,7 @@ pnpm demo:start         # Start production server
 ## Project Structure
 
 ```
-algorand-mpp-sdk/
+algorand-mpp-sdk-sdk/
 ├── sdk/src/                # SDK source code
 │   ├── client/             # Client-side charge (browser/Node)
 │   ├── server/             # Server-side charge (verify, co-sign, broadcast)

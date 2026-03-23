@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { Mppx, algorand } from '@goplausible/algorand-mpp/server'
+import { Mppx, algorand } from '@goplausible/algorand-mpp-sdk/server'
 import type { Env } from '../env'
 import type { FeePayer } from '../fee-payer'
 import {

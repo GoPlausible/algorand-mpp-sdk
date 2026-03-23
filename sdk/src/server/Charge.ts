@@ -99,7 +99,7 @@ const feePayerInvalid = (detail: string) =>
  *
  * @example
  * ```ts
- * import { Mppx, algorand } from '@goplausible/algorand-mpp/server'
+ * import { Mppx, algorand } from '@goplausible/algorand-mpp-sdk/server'
  *
  * const mppx = Mppx.create({
  *   methods: [algorand.charge({
@@ -220,13 +220,11 @@ export function charge(parameters: charge.Parameters) {
                 throw invalidCredentialType('type="txid" credentials cannot be used with fee sponsorship (feePayer: true)');
             }
 
-            const challengeId = cred.challenge.id;
-
             if (payloadType === 'transaction') {
-                return await verifyTransaction(cred, challenge, algodUrl, recipient, store, signer, signerAddress, challengeId);
+                return await verifyTransaction(cred, challenge, algodUrl, recipient, store, signer, signerAddress);
             }
 
-            return await verifyTxid(cred, challenge, indexerUrl, recipient, store, challengeId);
+            return await verifyTxid(cred, challenge, indexerUrl, recipient, store);
         },
     });
 }
@@ -254,7 +252,6 @@ async function verifyTransaction(
     store: Store.Store,
     signer?: TransactionSigner,
     signerAddress?: string,
-    challengeId?: string,
 ) {
     const { paymentGroup, paymentIndex } = credential.payload;
     if (!paymentGroup || paymentGroup.length === 0) {
@@ -354,7 +351,6 @@ async function verifyTransaction(
 
     return Receipt.from({
         method: 'algorand',
-        ...(challengeId ? { externalId: challengeId } : {}),
         reference: txid,
         status: 'success',
         timestamp: new Date().toISOString(),
@@ -369,7 +365,6 @@ async function verifyTxid(
     indexerUrl: string,
     recipient: string,
     store: Store.Store,
-    challengeId?: string,
 ) {
     const { txid } = credential.payload;
     if (!txid) {
@@ -401,7 +396,6 @@ async function verifyTxid(
 
     return Receipt.from({
         method: 'algorand',
-        ...(challengeId ? { externalId: challengeId } : {}),
         reference: txid,
         status: 'success',
         timestamp: new Date().toISOString(),

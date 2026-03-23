@@ -116,7 +116,7 @@ const bold = (s: string) => `\x1b[1m${s}\x1b[0m`
 const PORT = process.env.PORT ?? 3000
 app.listen(PORT, () => {
   console.log()
-  console.log(bold('  algorand-mpp demo'))
+  console.log(bold('  algorand-mpp-sdk demo'))
   console.log()
   console.log(`  ${dim('Server')}      ${cyan(`http://localhost:${PORT}`)}`)
   console.log(`  ${dim('Recipient')}   ${green(RECIPIENT)}`)

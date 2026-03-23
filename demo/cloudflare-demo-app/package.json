@@ -1,12 +1,12 @@
 {
-  "name": "@goplausible/algorand-mpp-cloudflare-demo",
+  "name": "@goplausible/algorand-mpp-sdk-cloudflare-demo",
   "version": "0.1.0",
   "description": "Cloudflare Workers demo for the Algorand MPP SDK",
   "author": "GoPlausible <dev@goplausible.com> (https://goplausible.com)",
-  "homepage": "https://github.com/GoPlausible/algorand-mpp-sdk#readme",
+  "homepage": "https://github.com/GoPlausible/algorand-mpp-sdk-sdk#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/GoPlausible/algorand-mpp-sdk",
+    "url": "https://github.com/GoPlausible/algorand-mpp-sdk-sdk",
     "directory": "demo/cloudflare-demo-app"
   },
   "private": true,
@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "hono": "^4.7.0",
-    "@goplausible/algorand-mpp": "file:../..",
+    "@goplausible/algorand-mpp-sdk": "file:../..",
     "@algorandfoundation/algokit-utils": "10.0.0-alpha.39",
     "mppx": "^0.4.8",
     "@txnlab/use-wallet": "^4.3.1",

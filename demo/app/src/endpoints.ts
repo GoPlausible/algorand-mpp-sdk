@@ -47,7 +47,7 @@ export function buildUrl(endpoint: Endpoint, paramValues: Record<string, string>
 /** Generate a code snippet for a given endpoint. */
 export function buildSnippet(endpoint: Endpoint, paramValues: Record<string, string>): string {
   const url = buildUrl(endpoint, paramValues)
-  return `import { Mppx, algorand } from '@goplausible/algorand-mpp/client'
+  return `import { Mppx, algorand } from '@goplausible/algorand-mpp-sdk/client'
 
 const method = algorand.charge({
   signer,          // TransactionSigner from use-wallet or algokit-utils

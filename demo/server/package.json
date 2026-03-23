@@ -1,12 +1,12 @@
 {
-  "name": "@goplausible/algorand-mpp-demo-server",
+  "name": "@goplausible/algorand-mpp-sdk-demo-server",
   "version": "0.1.0",
   "description": "Demo server for the Algorand MPP SDK",
   "author": "GoPlausible <dev@goplausible.com> (https://goplausible.com)",
-  "homepage": "https://github.com/GoPlausible/algorand-mpp-sdk#readme",
+  "homepage": "https://github.com/GoPlausible/algorand-mpp-sdk-sdk#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/GoPlausible/algorand-mpp-sdk",
+    "url": "https://github.com/GoPlausible/algorand-mpp-sdk-sdk",
     "directory": "demo/server"
   },
   "private": true,
@@ -19,7 +19,7 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.0.0",
-    "@goplausible/algorand-mpp": "file:../..",
+    "@goplausible/algorand-mpp-sdk": "file:../..",
     "@algorandfoundation/algokit-utils": "10.0.0-alpha.39",
     "mppx": "^0.4.8"
   },
