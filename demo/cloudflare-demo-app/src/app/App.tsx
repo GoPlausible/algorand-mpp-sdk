@@ -22,6 +22,10 @@ export default function App() {
   const isMobile = width < 768
 
   const [showWallet, setShowWallet] = useState(false)
+  const [showInfo, setShowInfo] = useState(false)
+  const [theme, setTheme] = useState<'dark' | 'light' | 'system'>(() => {
+    return (localStorage.getItem('mpp-theme') as 'dark' | 'light' | 'system') ?? 'dark'
+  })
   const [balances, setBalances] = useState<Balances | null>(null)
   const [selectedIdx, setSelectedIdx] = useState(0)
   const [paramValues, setParamValues] = useState<Record<string, string>>({})
@@ -62,6 +66,19 @@ export default function App() {
       })
       .catch(() => {})
   }, [])
+
+  // Theme management
+  const resolvedTheme = theme === 'system'
+    ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+    : theme
+
+  useEffect(() => {
+    localStorage.setItem('mpp-theme', theme)
+    document.body.style.background = resolvedTheme === 'light' ? '#F5F5F5' : '#0A0A0A'
+    document.body.style.color = resolvedTheme === 'light' ? '#1A1A1A' : '#E0E0E0'
+  }, [theme, resolvedTheme])
+
+  const t = resolvedTheme === 'light' ? lightColors : darkColors
 
   const refreshBalance = useCallback(async () => {
     if (!senderAddress) return
@@ -160,45 +177,131 @@ export default function App() {
   }
 
   const kindColor: Record<Kind, string> = {
-    req: '#6F42C1',
+    req: t.accent,
     '402': '#FFD700',
-    ok: '#00D4AA',
+    ok: t.green,
     error: '#f88',
     info: '#4FC3F7',
     dim: '#666',
   }
 
+  const themeBtn = (value: 'dark' | 'light' | 'system', icon: string, label: string) => (
+    <button
+      title={label}
+      style={{
+        padding: '4px 7px',
+        background: theme === value ? t.accent + '22' : 'transparent',
+        border: `1px solid ${theme === value ? t.accent + '66' : t.border}`,
+        borderRadius: 5,
+        color: theme === value ? t.accent : t.muted,
+        fontFamily: 'JetBrains Mono, monospace',
+        fontSize: 12,
+        cursor: 'pointer',
+        lineHeight: 1,
+      }}
+      onClick={() => setTheme(value)}
+    >
+      {icon}
+    </button>
+  )
+
+  const topBar = (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, padding: '10px 16px', borderBottom: `1px solid ${t.border}`, background: t.bgAlt }}>
+      <div style={{ display: 'flex', gap: 3 }}>
+        {themeBtn('light', '\u2600', 'Light')}
+        {themeBtn('dark', '\u263E', 'Dark')}
+        {themeBtn('system', '\u25D0', 'System')}
+      </div>
+      <button
+        title="Info"
+        style={{
+          padding: '4px 8px',
+          background: 'transparent',
+          border: `1px solid ${t.border}`,
+          borderRadius: 5,
+          color: t.muted,
+          fontFamily: 'JetBrains Mono, monospace',
+          fontSize: 12,
+          cursor: 'pointer',
+          lineHeight: 1,
+        }}
+        onClick={() => setShowInfo(true)}
+      >
+        i
+      </button>
+      <span style={{ fontSize: 9, color: t.muted, marginLeft: 4 }}>
+        Powered by <a href="https://goplausible.com" target="_blank" rel="noopener" style={{ color: t.accent, textDecoration: 'none' }}>GoPlausible</a>
+      </span>
+    </div>
+  )
+
+  const infoDialog = showInfo ? (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowInfo(false)}>
+      <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: 28, maxWidth: 420, width: '90%', fontFamily: 'JetBrains Mono, monospace' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: t.text }}>Algorand MPP SDK</h3>
+          <button style={{ background: 'none', border: 'none', color: t.muted, fontSize: 18, cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace' }} onClick={() => setShowInfo(false)}>&times;</button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <a href="https://github.com/GoPlausible/algorand-mpp-sdk" target="_blank" rel="noopener" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: t.bgAlt, border: `1px solid ${t.border}`, borderRadius: 8, color: t.text, textDecoration: 'none', fontSize: 12 }}>
+            <span style={{ fontSize: 16 }}>&#128193;</span>
+            <div><div style={{ fontWeight: 600 }}>GitHub Repository</div><div style={{ color: t.muted, fontSize: 10, marginTop: 2 }}>GoPlausible/algorand-mpp-sdk</div></div>
+          </a>
+          <a href="https://www.npmjs.com/package/@goplausible/algorand-mpp" target="_blank" rel="noopener" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: t.bgAlt, border: `1px solid ${t.border}`, borderRadius: 8, color: t.text, textDecoration: 'none', fontSize: 12 }}>
+            <span style={{ fontSize: 16 }}>&#128230;</span>
+            <div><div style={{ fontWeight: 600 }}>NPM Package</div><div style={{ color: t.muted, fontSize: 10, marginTop: 2 }}>@goplausible/algorand-mpp</div></div>
+          </a>
+          <a href="https://github.com/GoPlausible/algorand-mpp-sdk/tree/main/docs" target="_blank" rel="noopener" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: t.bgAlt, border: `1px solid ${t.border}`, borderRadius: 8, color: t.text, textDecoration: 'none', fontSize: 12 }}>
+            <span style={{ fontSize: 16 }}>&#128214;</span>
+            <div><div style={{ fontWeight: 600 }}>Documentation</div><div style={{ color: t.muted, fontSize: 10, marginTop: 2 }}>Architecture, flows, and guides</div></div>
+          </a>
+        </div>
+        <div style={{ marginTop: 16, textAlign: 'center', fontSize: 10, color: t.muted }}>
+          Built and powered by <a href="https://goplausible.com" target="_blank" rel="noopener" style={{ color: t.accent, textDecoration: 'none' }}>GoPlausible</a>
+        </div>
+      </div>
+    </div>
+  ) : null
+
+  const footer = (
+    <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '6px 16px', borderTop: `1px solid ${t.border}`, background: t.bgAlt }}>
+      <span style={{ fontSize: 9, color: t.muted }}>
+        Built and powered by <a href="https://goplausible.com" target="_blank" rel="noopener" style={{ color: t.accent, textDecoration: 'none' }}>GoPlausible</a>
+      </span>
+    </div>
+  )
+
   const sidebar = (
-    <div style={s.sidebar}>
-      <div style={s.brandBar}>
+    <div style={{...s.sidebar, background: t.bgSidebar, borderColor: t.border}}>
+      <div style={{...s.brandBar, background: t.bgAlt, borderColor: t.border}}>
         <img src="/algorand-logomark-blue-RGB.png" alt="Algorand" style={s.brandLogo} />
         <div>
           <div style={s.brandTitle}>Algorand <span style={{ color: '#6F42C1' }}>MPP</span></div>
           <div style={s.brandSub}>Machine Payments Protocol</div>
         </div>
       </div>
-      <div style={s.sidebarHeader}>
-        <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>
+      <div style={{...s.sidebarHeader, borderColor: t.border}}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: t.text }}>
           Endpoints
         </span>
       </div>
-      <div style={s.walletBar}>
+      <div style={{...s.walletBar, borderColor: t.border, background: t.bgAlt}}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {activeWallet?.metadata.icon && (
             <img src={activeWallet.metadata.icon} alt="" style={{ width: 18, height: 18, borderRadius: 4 }} />
           )}
-          <span style={{ color: '#00D4AA', fontSize: 11 }}>
+          <span style={{ color: t.green, fontSize: 11 }}>
             {senderNfd ?? `${senderAddress.slice(0, 4)}...${senderAddress.slice(-4)}`}
           </span>
-          <span style={{ color: '#888', fontSize: 10 }}>
+          <span style={{ color: t.muted, fontSize: 10 }}>
             {balances !== null ? `${balances.algo.toFixed(2)} A` : '...'}
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ color: '#666', fontSize: 9, textTransform: 'uppercase' as const }}>
+          <span style={{ color: t.muted, fontSize: 9, textTransform: 'uppercase' as const }}>
             {serverNetwork}
           </span>
-          <button style={s.walletBtn} onClick={() => setShowWallet(true)}>
+          <button style={{...s.walletBtn, background: t.green + '22', borderColor: t.green + '44', color: t.green}} onClick={() => setShowWallet(true)}>
             info
           </button>
           <button
@@ -216,8 +319,9 @@ export default function App() {
           key={ep.path}
           style={{
             ...s.epBtn,
-            background: i === selectedIdx ? '#1A1A2A' : 'transparent',
-            borderColor: i === selectedIdx ? '#6F42C1' : '#222',
+            background: i === selectedIdx ? (resolvedTheme === 'light' ? '#E8E0F8' : '#1A1A2A') : 'transparent',
+            borderColor: i === selectedIdx ? t.accent : t.border,
+            color: t.text,
           }}
           onClick={() => {
             setSelectedIdx(i)
@@ -226,52 +330,52 @@ export default function App() {
         >
           <span
             style={{
-              color: ep.method === 'GET' ? '#00D4AA' : '#FFD700',
+              color: ep.method === 'GET' ? t.green : '#FFD700',
               fontSize: 10,
             }}
           >
             {ep.method}
           </span>
-          <span style={{ color: '#ccc', fontSize: 12, marginLeft: 8 }}>
+          <span style={{ color: t.text, fontSize: 12, marginLeft: 8 }}>
             {ep.description}
           </span>
-          <span style={{ color: '#666', fontSize: 10, marginLeft: 'auto' }}>
+          <span style={{ color: t.muted, fontSize: 10, marginLeft: 'auto' }}>
             {ep.cost}
           </span>
         </button>
       ))}
-      <div style={s.sidebarBottom}>
+      <div style={{...s.sidebarBottom, borderColor: t.border}}>
         {feePayerInfo && (
-          <div style={s.balanceSection}>
+          <div style={{...s.balanceSection, background: t.bgAlt, borderColor: t.border}}>
             <div style={s.balanceLabel}>Fee payer</div>
             <div style={s.balanceRow}>
-              <span style={{ color: '#6F42C1', fontWeight: 600 }}>
+              <span style={{ color: t.accent, fontWeight: 600 }}>
                 {feePayerInfo.balance.toFixed(3)}
               </span>
-              <span style={{ color: '#666' }}>ALGO</span>
+              <span style={{ color: t.muted }}>ALGO</span>
             </div>
-            <div style={{ color: '#555', fontSize: 9, marginTop: 2 }}>
+            <div style={{ color: t.muted, fontSize: 9, marginTop: 2 }}>
               {feePayerInfo.address.slice(0, 8)}...
               {feePayerInfo.address.slice(-4)}
             </div>
           </div>
         )}
-        <div style={{ ...s.balanceSection, marginTop: 8 }}>
+        <div style={{ ...s.balanceSection, marginTop: 8, background: t.bgAlt, borderColor: t.border }}>
           <div style={s.balanceLabel}>Client</div>
           <div style={s.balanceRow}>
-            <span style={{ color: '#00D4AA', fontWeight: 600 }}>
+            <span style={{ color: t.green, fontWeight: 600 }}>
               {balances !== null ? balances.algo.toFixed(3) : '\u2014'}
             </span>
-            <span style={{ color: '#666' }}>ALGO</span>
+            <span style={{ color: t.muted }}>ALGO</span>
           </div>
           <div style={s.balanceRow}>
-            <span style={{ color: '#888' }}>
+            <span style={{ color: t.muted }}>
               {balances !== null ? balances.usdc.toFixed(2) : '\u2014'}
             </span>
-            <span style={{ color: '#666' }}>USDC</span>
+            <span style={{ color: t.muted }}>USDC</span>
           </div>
         </div>
-        <div style={{ color: '#555', fontSize: 10, marginTop: 8 }}>
+        <div style={{ color: t.muted, fontSize: 10, marginTop: 8 }}>
           {totalRequests} request{totalRequests !== 1 ? 's' : ''}
         </div>
       </div>
@@ -299,17 +403,19 @@ export default function App() {
   const isMarketplace = endpoint.path.includes('marketplace')
 
   const showcase = (isWeather || isMarketplace) ? (
-    <div style={s.showcase}>
+    <div style={{...s.showcase, borderColor: t.border, background: t.bgSidebar}}>
       {isWeather && (
         <div style={s.showcaseSection}>
-          <div style={s.showcaseTitle}>Select a city</div>
+          <div style={{...s.showcaseTitle, color: t.text}}>Select a city</div>
           <div style={s.showcaseGrid}>
             {CITIES.map((city) => (
               <button
                 key={city}
                 style={{
                   ...s.showcaseChip,
-                  borderColor: (paramValues.city || 'san-francisco') === city ? '#00D4AA' : '#222',
+                  background: t.bgCard,
+                  borderColor: (paramValues.city || 'san-francisco') === city ? t.green : t.border,
+                  color: t.text,
                 }}
                 onClick={() => setParamValues({ city })}
               >
@@ -321,23 +427,24 @@ export default function App() {
       )}
       {isMarketplace && products.length > 0 && (
         <div style={s.showcaseSection}>
-          <div style={s.showcaseTitle}>Products</div>
-          <div style={s.showcaseSub}>USDC with splits (seller + 5% platform + 2% referral)</div>
+          <div style={{...s.showcaseTitle, color: t.text}}>Products</div>
+          <div style={{...s.showcaseSub, color: t.muted}}>USDC with splits (seller + 5% platform + 2% referral)</div>
           <div style={s.productGrid}>
             {products.map((p) => (
               <button
                 key={p.id}
                 style={{
                   ...s.productCard,
-                  borderColor: endpoint.path.includes('buy') && (paramValues.productId || 'algo-hoodie') === p.id ? '#6F42C1' : '#222',
+                  background: t.bgCard,
+                  borderColor: endpoint.path.includes('buy') && (paramValues.productId || 'algo-hoodie') === p.id ? t.accent : t.border,
                 }}
                 onClick={() => selectEndpoint(buyIdx, { productId: p.id, referrer: '' })}
               >
                 {productIcons[p.id] && (
                   <img src={productIcons[p.id]} alt="" style={{ width: 48, height: 48, borderRadius: 8, marginBottom: 8 }} />
                 )}
-                <div style={{ color: '#fff', fontSize: 12, fontWeight: 600 }}>{p.name}</div>
-                <div style={{ color: '#888', fontSize: 10, marginTop: 2 }}>{p.description}</div>
+                <div style={{ color: t.text, fontSize: 12, fontWeight: 600 }}>{p.name}</div>
+                <div style={{ color: t.muted, fontSize: 10, marginTop: 2 }}>{p.description}</div>
                 <div style={{ color: '#FFD700', fontSize: 11, marginTop: 6, fontWeight: 600 }}>{p.price}</div>
               </button>
             ))}
@@ -348,15 +455,15 @@ export default function App() {
   ) : null
 
   const apiPanel = (
-    <div style={s.apiPanel}>
-      <div style={s.apiHeader}>
-        <span style={{ color: '#00D4AA', fontSize: 11 }}>
+    <div style={{...s.apiPanel, borderColor: t.border}}>
+      <div style={{...s.apiHeader, borderColor: t.border}}>
+        <span style={{ color: t.green, fontSize: 11 }}>
           {endpoint.method}
         </span>
-        <span style={{ color: '#ccc', fontSize: 13, marginLeft: 8 }}>
+        <span style={{ color: t.text, fontSize: 13, marginLeft: 8 }}>
           {endpoint.path}
         </span>
-        <span style={{ color: '#666', fontSize: 11, marginLeft: 'auto' }}>
+        <span style={{ color: t.muted, fontSize: 11, marginLeft: 'auto' }}>
           {endpoint.cost}
         </span>
       </div>
@@ -371,11 +478,11 @@ export default function App() {
               marginBottom: 8,
             }}
           >
-            <label style={{ color: '#888', fontSize: 12, minWidth: 80 }}>
+            <label style={{ color: t.muted, fontSize: 12, minWidth: 80 }}>
               {p.name}
             </label>
             <input
-              style={s.input}
+              style={{...s.input, background: t.bgAlt, borderColor: t.border, color: t.text}}
               value={paramValues[p.name] ?? p.default}
               onChange={(e) =>
                 setParamValues((v) => ({ ...v, [p.name]: e.target.value }))
@@ -392,7 +499,9 @@ export default function App() {
         <button
           style={{
             ...s.codeToggle,
-            borderColor: showCode ? '#6F42C1' : '#333',
+            background: t.bgCard,
+            borderColor: showCode ? t.accent : t.border,
+            color: t.text,
           }}
           onClick={() => setShowCode(!showCode)}
         >
@@ -400,7 +509,7 @@ export default function App() {
         </button>
       </div>
       {showCode && (
-        <div style={s.codePane}>
+        <div style={{...s.codePane, background: t.bgAlt, borderColor: t.border}}>
           <CodeBlock code={buildSnippet(endpoint, paramValues)} />
         </div>
       )}
@@ -408,9 +517,9 @@ export default function App() {
   )
 
   const terminal = (
-    <div ref={logRef} style={s.terminal}>
+    <div ref={logRef} style={{...s.terminal, background: t.bgAlt}}>
       {logs.length === 0 && (
-        <div style={{ color: '#444', padding: 16, fontSize: 12 }}>
+        <div style={{ color: t.muted, padding: 16, fontSize: 12 }}>
           Send a request to see the 402 payment flow...
         </div>
       )}
@@ -483,9 +592,11 @@ export default function App() {
     <div style={s.layout}>
       {sidebar}
       <div style={s.main}>
+        {topBar}
         {showcase}
         {apiPanel}
         {terminal}
+        {footer}
       </div>
       {showWallet && (
         <WalletModal
@@ -493,8 +604,33 @@ export default function App() {
           onDisconnect={() => setShowWallet(false)}
         />
       )}
+      {infoDialog}
     </div>
   )
+}
+
+const darkColors = {
+  bg: '#0A0A0A',
+  bgAlt: '#0A0A0A',
+  bgCard: '#111',
+  bgSidebar: '#0D0D0D',
+  text: '#E0E0E0',
+  muted: '#666',
+  border: '#222',
+  accent: '#6F42C1',
+  green: '#00D4AA',
+}
+
+const lightColors = {
+  bg: '#F5F5F5',
+  bgAlt: '#FAFAFA',
+  bgCard: '#FFF',
+  bgSidebar: '#F0F0F0',
+  text: '#1A1A1A',
+  muted: '#888',
+  border: '#DDD',
+  accent: '#6F42C1',
+  green: '#00A87D',
 }
 
 const s: Record<string, React.CSSProperties> = {
