@@ -173,7 +173,7 @@ export default function App() {
 
   // Not connected — show wallet connect screen
   if (!activeAccount) {
-    return <WalletConnect onConnected={() => refreshBalance()} />
+    return <WalletConnect onConnected={() => refreshBalance()} isDark={resolvedTheme === 'dark'} />
   }
 
   const kindColor: Record<Kind, string> = {
@@ -276,7 +276,7 @@ export default function App() {
       <div style={{...s.brandBar, background: t.bgAlt, borderColor: t.border}}>
         <img src="/algorand-logomark-blue-RGB.png" alt="Algorand" style={s.brandLogo} />
         <div>
-          <div style={s.brandTitle}>Algorand <span style={{ color: '#6F42C1' }}>MPP</span></div>
+          <div style={{...s.brandTitle, color: t.text}}>Algorand <span style={{ color: '#6F42C1' }}>MPP</span></div>
           <div style={s.brandSub}>Machine Payments Protocol</div>
         </div>
       </div>

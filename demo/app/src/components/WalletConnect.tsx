@@ -2,9 +2,10 @@ import { useWallet } from '@txnlab/use-wallet-react'
 
 type Props = {
   onConnected: () => void
+  isDark?: boolean
 }
 
-export default function WalletConnect({ onConnected }: Props) {
+export default function WalletConnect({ onConnected, isDark = true }: Props) {
   const { wallets, activeAccount } = useWallet()
 
   if (activeAccount) {
@@ -17,7 +18,7 @@ export default function WalletConnect({ onConnected }: Props) {
       <div style={s.brand}>
         <img src="/algorand-logomark-blue-RGB.png" alt="Algorand" style={s.logo} />
         <div>
-          <h1 style={s.title}>Algorand <span style={{ color: '#6F42C1' }}>MPP</span></h1>
+          <h1 style={{...s.title, color: isDark ? '#fff' : '#1A1A1A'}}>Algorand <span style={{ color: '#6F42C1' }}>MPP</span></h1>
           <p style={s.subtitle}>Machine Payments Protocol SDK</p>
         </div>
       </div>
