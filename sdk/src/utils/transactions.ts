@@ -135,6 +135,11 @@ export function buildChargeGroup(params: {
         suggestedParams,
     } = params;
 
+    // Validate split count per spec (max 7).
+    if (splits && splits.length > 7) {
+        throw new Error('splits cannot exceed 7 entries');
+    }
+
     const transactions: Transaction[] = [];
 
     // Compute primary amount (total minus splits).

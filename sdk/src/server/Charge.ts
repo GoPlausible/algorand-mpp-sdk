@@ -25,6 +25,65 @@ import {
     resolveSuggestedParams,
 } from '../utils/transactions.js';
 
+// ── Algorand-specific error types per spec (RFC 9457 Problem Details) ──
+
+const PROBLEM_BASE = 'https://paymentauth.org/problems/algorand';
+
+class AlgorandPaymentError extends Error {
+    readonly type: string;
+    readonly status = 402;
+
+    constructor(type: string, message: string) {
+        super(message);
+        this.type = `${PROBLEM_BASE}/${type}`;
+        this.name = 'AlgorandPaymentError';
+    }
+}
+
+/** Cannot decode credential, parse JSON, or required fields absent/wrong type. */
+const malformedCredential = (detail: string) =>
+    new AlgorandPaymentError('malformed-credential', detail);
+
+/** challenge.id matches no issued challenge, or challenge already consumed. */
+const unknownChallenge = (detail: string) =>
+    new AlgorandPaymentError('unknown-challenge', detail);
+
+/** payload.type is "txid" but challenge specifies feePayer: true. */
+const invalidCredentialType = (detail: string) =>
+    new AlgorandPaymentError('invalid-credential-type', detail);
+
+/** Too many transactions (>16), mismatched Group IDs, or paymentIndex out of range. */
+const groupInvalid = (detail: string) =>
+    new AlgorandPaymentError('group-invalid', detail);
+
+/** Group contains close, aclose, or rekey fields. */
+const dangerousTransaction = (detail: string) =>
+    new AlgorandPaymentError('dangerous-transaction', detail);
+
+/** On-chain transfer doesn't match challenge. */
+const transferMismatch = (detail: string) =>
+    new AlgorandPaymentError('transfer-mismatch', detail);
+
+/** TxID cannot be fetched from Algorand network. */
+const transactionNotFound = (detail: string) =>
+    new AlgorandPaymentError('transaction-not-found', detail);
+
+/** Transaction group failed simulation or was rejected by network. */
+const transactionFailed = (detail: string) =>
+    new AlgorandPaymentError('transaction-failed', detail);
+
+/** Server attempted to broadcast but Algorand rejected it. */
+const broadcastFailed = (detail: string) =>
+    new AlgorandPaymentError('broadcast-failed', detail);
+
+/** TxID already used to fulfill a previous challenge. */
+const txidConsumed = (detail: string) =>
+    new AlgorandPaymentError('txid-consumed', detail);
+
+/** Fee payer transaction is invalid. */
+const feePayerInvalid = (detail: string) =>
+    new AlgorandPaymentError('fee-payer-invalid', detail);
+
 /**
  * Creates an Algorand `charge` method for usage on the server.
  *
@@ -71,6 +130,29 @@ export function charge(parameters: charge.Parameters) {
     const algodUrl = parameters.algodUrl ?? DEFAULT_ALGOD_URLS[network] ?? DEFAULT_ALGOD_URLS[ALGORAND_MAINNET];
     const indexerUrl = parameters.indexerUrl ?? DEFAULT_INDEXER_URLS[network] ?? DEFAULT_INDEXER_URLS[ALGORAND_MAINNET];
 
+    // Validate addresses at config time (checksum verification per spec).
+    try {
+        Address.fromString(recipient);
+    } catch {
+        throw new Error(`Invalid recipient address: ${recipient}`);
+    }
+    if (signerAddress) {
+        try {
+            Address.fromString(signerAddress);
+        } catch {
+            throw new Error(`Invalid fee payer (signerAddress): ${signerAddress}`);
+        }
+    }
+    if (splits) {
+        for (const split of splits) {
+            try {
+                Address.fromString(split.recipient);
+            } catch {
+                throw new Error(`Invalid split recipient address: ${split.recipient}`);
+            }
+        }
+    }
+
     if (asaId && decimals === undefined) {
         throw new Error('decimals is required when asaId is set');
     }
@@ -95,30 +177,24 @@ export function charge(parameters: charge.Parameters) {
 
             const reference = crypto.randomUUID();
 
-            // Pre-fetch suggested params so the client can skip an RPC call.
-            let suggestedParams: {
-                firstValid: number;
-                genesisHash: string;
-                genesisId: string;
-                lastValid: number;
-            } | undefined;
-
-            try {
-                const res = await fetch(`${algodUrl}/v2/transactions/params`);
-                const data = (await res.json()) as {
-                    'genesis-hash': string;
-                    'genesis-id': string;
-                    'last-round': number;
-                };
-                suggestedParams = {
-                    firstValid: data['last-round'],
-                    lastValid: data['last-round'] + 1000,
-                    genesisHash: data['genesis-hash'],
-                    genesisId: data['genesis-id'],
-                };
-            } catch {
-                // Non-fatal — client will fetch its own params.
+            // Fetch suggested params (MUST be present per spec).
+            // Failure propagates as a 500 — the server cannot issue a
+            // valid challenge without transaction parameters.
+            const res = await fetch(`${algodUrl}/v2/transactions/params`);
+            if (!res.ok) {
+                throw new Error(`Algod unreachable: ${res.status} ${res.statusText}`);
             }
+            const data = (await res.json()) as {
+                'genesis-hash': string;
+                'genesis-id': string;
+                'last-round': number;
+            };
+            const suggestedParams = {
+                firstValid: data['last-round'],
+                lastValid: data['last-round'] + 1000,
+                genesisHash: data['genesis-hash'],
+                genesisId: data['genesis-id'],
+            };
 
             return {
                 ...request,
@@ -128,7 +204,7 @@ export function charge(parameters: charge.Parameters) {
                     ...(asaId ? { asaId: String(asaId), decimals } : {}),
                     ...(signer && signerAddress ? { feePayer: true, feePayerKey: signerAddress } : {}),
                     ...(splits?.length ? { splits } : {}),
-                    ...(suggestedParams ? { suggestedParams } : {}),
+                    suggestedParams,
                 },
                 recipient,
             };
@@ -141,14 +217,16 @@ export function charge(parameters: charge.Parameters) {
 
             // Spec: type="txid" MUST NOT be used with feePayer: true
             if (payloadType === 'txid' && challenge.methodDetails.feePayer) {
-                throw new Error('type="txid" credentials cannot be used with fee sponsorship (feePayer: true)');
+                throw invalidCredentialType('type="txid" credentials cannot be used with fee sponsorship (feePayer: true)');
             }
+
+            const challengeId = cred.challenge.id;
 
             if (payloadType === 'transaction') {
-                return await verifyTransaction(cred, challenge, algodUrl, recipient, store, signer, signerAddress);
+                return await verifyTransaction(cred, challenge, algodUrl, recipient, store, signer, signerAddress, challengeId);
             }
 
-            return await verifyTxid(cred, challenge, indexerUrl, recipient, store);
+            return await verifyTxid(cred, challenge, indexerUrl, recipient, store, challengeId);
         },
     });
 }
@@ -163,7 +241,7 @@ function resolvePayloadType(payload: {
 }): 'transaction' | 'txid' {
     if (payload.type === 'txid') return 'txid';
     if (payload.type === 'transaction') return 'transaction';
-    throw new Error('Missing or invalid payload type: must be "transaction" or "txid"');
+    throw malformedCredential('Missing or invalid payload type: must be "transaction" or "txid"');
 }
 
 // ── Pull mode (type="transaction") ──
@@ -176,19 +254,20 @@ async function verifyTransaction(
     store: Store.Store,
     signer?: TransactionSigner,
     signerAddress?: string,
+    challengeId?: string,
 ) {
     const { paymentGroup, paymentIndex } = credential.payload;
     if (!paymentGroup || paymentGroup.length === 0) {
-        throw new Error('Missing paymentGroup in credential payload');
+        throw malformedCredential('Missing paymentGroup in credential payload');
     }
     if (paymentIndex === undefined || paymentIndex === null) {
-        throw new Error('Missing paymentIndex in credential payload');
+        throw malformedCredential('Missing paymentIndex in credential payload');
     }
     if (paymentGroup.length > 16) {
-        throw new Error('paymentGroup exceeds maximum of 16 transactions');
+        throw groupInvalid('paymentGroup exceeds maximum of 16 transactions');
     }
     if (paymentIndex < 0 || paymentIndex >= paymentGroup.length) {
-        throw new Error('paymentIndex out of range');
+        throw groupInvalid('paymentIndex out of range');
     }
 
     // Decode all transactions.
@@ -234,11 +313,22 @@ async function verifyTransaction(
     if (challenge.methodDetails.feePayer && signer && signerAddress) {
         const feePayerIndex = findFeePayerIndex(transactions, signerAddress);
         if (feePayerIndex === -1) {
-            throw new Error('Fee payer transaction not found in group');
+            throw feePayerInvalid('Fee payer transaction not found in group');
         }
 
         // Verify fee payer transaction.
         verifyFeePayerTransaction(transactions[feePayerIndex], signerAddress, transactions.length);
+
+        // Verify client transactions have fee=0 when fee payer is present (per spec).
+        for (let i = 0; i < transactions.length; i++) {
+            if (i === feePayerIndex) continue;
+            const txnFee = transactions[i].fee;
+            if (txnFee !== undefined && txnFee > 0n) {
+                throw transferMismatch(
+                    `Client transaction at index ${i} has fee=${txnFee} but fee payer is covering fees — client fees must be 0`,
+                );
+            }
+        }
 
         // Co-sign the fee payer transaction.
         const signedFeePayerB64 = await coSignBase64Transaction(
@@ -264,6 +354,7 @@ async function verifyTransaction(
 
     return Receipt.from({
         method: 'algorand',
+        ...(challengeId ? { externalId: challengeId } : {}),
         reference: txid,
         status: 'success',
         timestamp: new Date().toISOString(),
@@ -278,27 +369,28 @@ async function verifyTxid(
     indexerUrl: string,
     recipient: string,
     store: Store.Store,
+    challengeId?: string,
 ) {
     const { txid } = credential.payload;
     if (!txid) {
-        throw new Error('Missing txid in credential payload');
+        throw malformedCredential('Missing txid in credential payload');
     }
 
     // Validate TxID format (52-char base32).
     if (!/^[A-Z2-7]{52}$/.test(txid)) {
-        throw new Error('Invalid txid format: must be 52-character base32');
+        throw malformedCredential('Invalid txid format: must be 52-character base32');
     }
 
     // Replay prevention.
     const consumedKey = `algorand-charge:consumed:${txid}`;
     if (await store.get(consumedKey)) {
-        throw new Error('Transaction identifier already consumed');
+        throw txidConsumed('Transaction identifier already consumed');
     }
 
     // Fetch transaction from indexer.
     const tx = await fetchTransactionFromIndexer(indexerUrl, txid);
     if (!tx) {
-        throw new Error('Transaction not found or not yet confirmed');
+        throw transactionNotFound('Transaction not found or not yet confirmed');
     }
 
     // Verify transfer details.
@@ -309,6 +401,7 @@ async function verifyTxid(
 
     return Receipt.from({
         method: 'algorand',
+        ...(challengeId ? { externalId: challengeId } : {}),
         reference: txid,
         status: 'success',
         timestamp: new Date().toISOString(),
@@ -321,12 +414,12 @@ function verifyGroupId(transactions: Transaction[]) {
     if (transactions.length <= 1) return; // Single transactions don't need a group ID
     const firstGroupId = transactions[0].group;
     if (!firstGroupId) {
-        throw new Error('Transactions must have a group ID');
+        throw groupInvalid('Transactions must have a group ID');
     }
     for (let i = 1; i < transactions.length; i++) {
         const groupId = transactions[i].group;
         if (!groupId || !arraysEqual(firstGroupId, groupId)) {
-            throw new Error('All transactions must share the same group ID');
+            throw groupInvalid('All transactions must share the same group ID');
         }
     }
 }
@@ -338,39 +431,37 @@ function verifyPaymentDetails(txn: Transaction, challenge: ChallengeRequest, rec
     const primaryAmount = BigInt(challenge.amount) - splitsTotal;
 
     if (primaryAmount <= 0n) {
-        throw new Error('Splits consume the entire amount — primary recipient must receive a positive amount');
+        throw transferMismatch('Splits consume the entire amount — primary recipient must receive a positive amount');
     }
 
     if (asaId) {
-        // ASA transfer.
         if (txn.type !== TransactionType.AssetTransfer) {
-            throw new Error(`Expected asset transfer transaction, got ${txn.type}`);
+            throw transferMismatch(`Expected asset transfer transaction, got ${txn.type}`);
         }
         if (!txn.assetTransfer) {
-            throw new Error('Missing asset transfer fields');
+            throw transferMismatch('Missing asset transfer fields');
         }
         if (txn.assetTransfer.assetId !== BigInt(asaId)) {
-            throw new Error(`ASA ID mismatch: expected ${asaId}, got ${txn.assetTransfer.assetId}`);
+            throw transferMismatch(`ASA ID mismatch: expected ${asaId}, got ${txn.assetTransfer.assetId}`);
         }
         if (txn.assetTransfer.amount !== primaryAmount) {
-            throw new Error(`Amount mismatch: expected ${primaryAmount}, got ${txn.assetTransfer.amount}`);
+            throw transferMismatch(`Amount mismatch: expected ${primaryAmount}, got ${txn.assetTransfer.amount}`);
         }
         if (txn.assetTransfer.receiver.toString() !== recipient) {
-            throw new Error(`Recipient mismatch: expected ${recipient}, got ${txn.assetTransfer.receiver}`);
+            throw transferMismatch(`Recipient mismatch: expected ${recipient}, got ${txn.assetTransfer.receiver}`);
         }
     } else {
-        // Native ALGO payment.
         if (txn.type !== TransactionType.Payment) {
-            throw new Error(`Expected payment transaction, got ${txn.type}`);
+            throw transferMismatch(`Expected payment transaction, got ${txn.type}`);
         }
         if (!txn.payment) {
-            throw new Error('Missing payment fields');
+            throw transferMismatch('Missing payment fields');
         }
         if (txn.payment.amount !== primaryAmount) {
-            throw new Error(`Amount mismatch: expected ${primaryAmount}, got ${txn.payment.amount}`);
+            throw transferMismatch(`Amount mismatch: expected ${primaryAmount}, got ${txn.payment.amount}`);
         }
         if (txn.payment.receiver.toString() !== recipient) {
-            throw new Error(`Recipient mismatch: expected ${recipient}, got ${txn.payment.receiver}`);
+            throw transferMismatch(`Recipient mismatch: expected ${recipient}, got ${txn.payment.receiver}`);
         }
     }
 }
@@ -398,23 +489,20 @@ function verifySplits(transactions: Transaction[], paymentIndex: number, challen
         });
 
         if (!found) {
-            throw new Error(`Missing split transfer for recipient ${split.recipient} amount ${split.amount}`);
+            throw transferMismatch(`Missing split transfer for recipient ${split.recipient} amount ${split.amount}`);
         }
     }
 }
 
 function verifyNoDangerousFields(txn: Transaction) {
-    // Check for close remainder to (ALGO).
     if (txn.payment?.closeRemainderTo) {
-        throw new Error('Dangerous: transaction contains closeRemainderTo field');
+        throw dangerousTransaction('Transaction contains closeRemainderTo field');
     }
-    // Check for close asset to (ASA).
     if (txn.assetTransfer?.closeRemainderTo) {
-        throw new Error('Dangerous: transaction contains close asset to field');
+        throw dangerousTransaction('Transaction contains close asset to field');
     }
-    // Check for rekey.
     if (txn.rekeyTo) {
-        throw new Error('Dangerous: transaction contains rekeyTo field');
+        throw dangerousTransaction('Transaction contains rekeyTo field');
     }
 }
 
@@ -428,28 +516,32 @@ function findFeePayerIndex(transactions: Transaction[], feePayerAddress: string)
 
 function verifyFeePayerTransaction(txn: Transaction, feePayerAddress: string, groupSize: number) {
     if (txn.type !== TransactionType.Payment) {
-        throw new Error('Fee payer transaction must be a payment transaction');
+        throw feePayerInvalid('Fee payer transaction must be a payment transaction');
     }
     if (txn.sender.toString() !== feePayerAddress) {
-        throw new Error('Fee payer sender does not match feePayerKey');
+        throw feePayerInvalid('Fee payer sender does not match feePayerKey');
     }
     if (!txn.payment || txn.payment.amount !== 0n) {
-        throw new Error('Fee payer transaction amount must be 0');
+        throw feePayerInvalid('Fee payer transaction amount must be 0');
     }
     const receiverStr = txn.payment.receiver.toString();
     if (receiverStr !== feePayerAddress) {
-        throw new Error('Fee payer receiver must be the fee payer address (pay to self)');
+        throw feePayerInvalid('Fee payer receiver must be the fee payer address (pay to self)');
     }
     if (txn.payment.closeRemainderTo) {
-        throw new Error('Fee payer transaction must not have closeRemainderTo');
+        throw dangerousTransaction('Fee payer transaction must not have closeRemainderTo');
     }
     if (txn.rekeyTo) {
-        throw new Error('Fee payer transaction must not have rekeyTo');
+        throw dangerousTransaction('Fee payer transaction must not have rekeyTo');
     }
-    // Verify fee is reasonable (N * minFee * 2 as safety multiplier).
-    const maxReasonableFee = BigInt(groupSize) * MIN_TXN_FEE * 2n;
+    // Verify fee is reasonable: must be at least N*minFee, no more than N*minFee*2 (safety multiplier).
+    const expectedFee = BigInt(groupSize) * MIN_TXN_FEE;
+    const maxReasonableFee = expectedFee * 2n;
+    if (txn.fee !== undefined && txn.fee < expectedFee) {
+        throw feePayerInvalid(`Fee payer fee ${txn.fee} is below minimum ${expectedFee} for group of ${groupSize}`);
+    }
     if (txn.fee !== undefined && txn.fee > maxReasonableFee) {
-        throw new Error(`Fee payer fee ${txn.fee} exceeds reasonable maximum ${maxReasonableFee}`);
+        throw feePayerInvalid(`Fee payer fee ${txn.fee} exceeds reasonable maximum ${maxReasonableFee}`);
     }
 }
 
@@ -465,51 +557,48 @@ function verifyOnChainTransaction(
 
     if (asaId) {
         if (tx['tx-type'] !== 'axfer') {
-            throw new Error(`Expected axfer transaction, got ${tx['tx-type']}`);
+            throw transferMismatch(`Expected axfer transaction, got ${tx['tx-type']}`);
         }
         const xfer = tx['asset-transfer-transaction'];
-        if (!xfer) throw new Error('Missing asset-transfer-transaction');
+        if (!xfer) throw transferMismatch('Missing asset-transfer-transaction');
         if (String(xfer['asset-id']) !== asaId) {
-            throw new Error(`ASA ID mismatch: expected ${asaId}, got ${xfer['asset-id']}`);
+            throw transferMismatch(`ASA ID mismatch: expected ${asaId}, got ${xfer['asset-id']}`);
         }
         if (BigInt(xfer.amount) !== primaryAmount) {
-            throw new Error(`Amount mismatch: expected ${primaryAmount}, got ${xfer.amount}`);
+            throw transferMismatch(`Amount mismatch: expected ${primaryAmount}, got ${xfer.amount}`);
         }
         if (xfer.receiver !== recipient) {
-            throw new Error(`Recipient mismatch: expected ${recipient}, got ${xfer.receiver}`);
+            throw transferMismatch(`Recipient mismatch: expected ${recipient}, got ${xfer.receiver}`);
         }
     } else {
         if (tx['tx-type'] !== 'pay') {
-            throw new Error(`Expected pay transaction, got ${tx['tx-type']}`);
+            throw transferMismatch(`Expected pay transaction, got ${tx['tx-type']}`);
         }
         const pay = tx['payment-transaction'];
-        if (!pay) throw new Error('Missing payment-transaction');
+        if (!pay) throw transferMismatch('Missing payment-transaction');
         if (BigInt(pay.amount) !== primaryAmount) {
-            throw new Error(`Amount mismatch: expected ${primaryAmount}, got ${pay.amount}`);
+            throw transferMismatch(`Amount mismatch: expected ${primaryAmount}, got ${pay.amount}`);
         }
         if (pay.receiver !== recipient) {
-            throw new Error(`Recipient mismatch: expected ${recipient}, got ${pay.receiver}`);
+            throw transferMismatch(`Recipient mismatch: expected ${recipient}, got ${pay.receiver}`);
         }
     }
 
     // Check for dangerous fields.
     if (tx['payment-transaction']?.['close-remainder-to']) {
-        throw new Error('Dangerous: transaction contains close-remainder-to');
+        throw dangerousTransaction('Transaction contains close-remainder-to');
     }
     if (tx['asset-transfer-transaction']?.['close-to']) {
-        throw new Error('Dangerous: transaction contains close-to');
+        throw dangerousTransaction('Transaction contains close-to');
     }
     if (tx['rekey-to']) {
-        throw new Error('Dangerous: transaction contains rekey-to');
+        throw dangerousTransaction('Transaction contains rekey-to');
     }
 }
 
 // ── Algod/Indexer RPC helpers ──
 
 async function simulateGroup(algodUrl: string, paymentGroup: string[]): Promise<void> {
-    const groupBytes = paymentGroup.map(b64 => base64ToUint8Array(b64));
-
-    // Build simulate request.
     const request = {
         'txn-groups': [
             {
@@ -531,7 +620,7 @@ async function simulateGroup(algodUrl: string, paymentGroup: string[]): Promise<
 
     const failure = data['txn-groups']?.[0]?.['failure-message'];
     if (failure) {
-        throw new Error(`Transaction simulation failed: ${failure}`);
+        throw transactionFailed(`Transaction simulation failed: ${failure}`);
     }
 }
 
@@ -555,7 +644,7 @@ async function broadcastGroup(algodUrl: string, paymentGroup: string[]): Promise
 
     const data = (await response.json()) as { txId?: string; message?: string };
     if (!data.txId) {
-        throw new Error(`Failed to broadcast: ${data.message ?? 'unknown error'}`);
+        throw broadcastFailed(data.message ?? 'unknown error');
     }
 
     return data.txId;
@@ -575,12 +664,12 @@ async function waitForConfirmation(algodUrl: string, txid: string, timeoutMs = 1
         }
 
         if (data['pool-error']) {
-            throw new Error(`Transaction failed: ${data['pool-error']}`);
+            throw transactionFailed(`Transaction failed: ${data['pool-error']}`);
         }
 
         await new Promise(r => setTimeout(r, 1_000));
     }
-    throw new Error('Transaction confirmation timeout');
+    throw transactionFailed('Transaction confirmation timeout');
 }
 
 async function fetchTransactionFromIndexer(

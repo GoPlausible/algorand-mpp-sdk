@@ -115,6 +115,7 @@ export function charge(parameters: charge.Parameters) {
 
                 return Credential.serialize({
                     challenge,
+                    source: senderAddress,
                     payload: { txid, type: 'txid' },
                 });
             }
@@ -124,6 +125,7 @@ export function charge(parameters: charge.Parameters) {
 
             return Credential.serialize({
                 challenge,
+                source: senderAddress,
                 payload: { paymentGroup, paymentIndex, type: 'transaction' },
             });
         },
