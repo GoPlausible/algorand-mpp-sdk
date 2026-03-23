@@ -22,7 +22,7 @@
     "hono": "^4.7.0",
     "@goplausible/algorand-mpp": "file:../..",
     "@algorandfoundation/algokit-utils": "10.0.0-alpha.39",
-    "mppx": "^0.3.15",
+    "mppx": "^0.4.8",
     "@txnlab/use-wallet": "^4.3.1",
     "@txnlab/use-wallet-react": "^4.3.1",
     "@perawallet/connect": "^1.4.2",

@@ -29,7 +29,7 @@
     "react-router-dom": "^7.13.1",
     "@goplausible/algorand-mpp": "file:../..",
     "@algorandfoundation/algokit-utils": "10.0.0-alpha.39",
-    "mppx": "^0.3.15"
+    "mppx": "^0.4.8"
   },
   "devDependencies": {
     "@types/react": "^18.3.0",
