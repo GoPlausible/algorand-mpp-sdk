@@ -374,7 +374,20 @@ externalId
   and reconciliation. Servers MAY verify the note matches the
   `externalId` from the challenge.
 
-## Method Details
+methodDetails
+: REQUIRED. An object containing Algorand-specific parameters
+  for the charge. This field is defined as OPTIONAL by
+  {{I-D.payment-intent-charge}} but is elevated to REQUIRED
+  for the Algorand method, as it carries network, asset, fee
+  payer, and split configuration needed to construct
+  transactions. See {{method-details}} for the full schema.
+
+The `request` object MUST NOT include an `expires` field.
+Challenge expiry is conveyed exclusively via the `expires`
+auth-param in the `WWW-Authenticate` header, per
+{{I-D.payment-intent-charge}} and {{I-D.httpauth-payment}}.
+
+## Method Details {#method-details}
 
 The following fields are nested under `methodDetails` in
 the request JSON:
@@ -943,7 +956,16 @@ by the client.
 # Settlement Procedure
 
 Two settlement flows are supported, corresponding to
-the two credential types.
+the two credential types. Using the settlement taxonomy
+defined in {{I-D.payment-intent-charge}}:
+
+- **Pull mode** (`type="transaction"`) uses **deferred
+  settlement**: the client signs and the server broadcasts,
+  with confirmation occurring after credential submission.
+
+- **Push mode** (`type="txid"`) uses **immediate
+  settlement**: the client broadcasts and waits for
+  confirmation before presenting the credential.
 
 ## Pull Mode Settlement (type="transaction")
 
