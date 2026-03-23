@@ -1,4 +1,5 @@
 # Algorand MPP SDK Documentation
+<img width="3362" height="1248" alt="algorand mpp sdk" src="https://github.com/user-attachments/assets/7e1c07ec-f87a-4cde-81ff-5410f5824a40" />
 
 **Machine Payments Protocol (MPP) SDK for Algorand**
 
