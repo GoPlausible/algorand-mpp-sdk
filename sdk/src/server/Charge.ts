@@ -1,12 +1,10 @@
 import { Address } from "@algorandfoundation/algokit-utils";
 import {
-  type SignedTransaction,
   type Transaction,
   TransactionType,
   type TransactionSigner,
   decodeSignedTransaction,
   decodeTransaction,
-  encodeSignedTransaction,
   encodeTransactionRaw,
 } from "@algorandfoundation/algokit-utils/transact";
 import { Method, Receipt, Store } from "mppx";
@@ -21,8 +19,6 @@ import {
   base64ToUint8Array,
   coSignBase64Transaction,
   computeRequiredFee,
-  uint8ArrayToBase64,
-  resolveSuggestedParams,
 } from "../utils/transactions.js";
 
 // ── Algorand-specific error types per spec (RFC 9457 Problem Details) ──
@@ -64,9 +60,9 @@ const transactionFailed = (detail: string) =>
 const broadcastFailed = (detail: string) =>
   new AlgorandPaymentError("broadcast-failed", detail);
 
-/** Fee payer transaction is invalid. */
+/** Fee payer transaction structure is invalid (maps to group-invalid per spec). */
 const feePayerInvalid = (detail: string) =>
-  new AlgorandPaymentError("fee-payer-invalid", detail);
+  new AlgorandPaymentError("group-invalid", detail);
 
 /**
  * Creates an Algorand `charge` method for usage on the server.
@@ -235,8 +231,12 @@ async function verifyTransaction(
   if (paymentIndex === undefined || paymentIndex === null) {
     throw malformedCredential("Missing paymentIndex in credential payload");
   }
-  if (paymentGroup.length > 16) {
-    throw groupInvalid("paymentGroup exceeds maximum of 16 transactions");
+  // Spec: group must contain only the payment and optionally a fee payer (max 2).
+  const expectedSize = challenge.methodDetails.feePayer ? 2 : 1;
+  if (paymentGroup.length > expectedSize) {
+    throw groupInvalid(
+      `paymentGroup has ${paymentGroup.length} transactions but expected at most ${expectedSize}`,
+    );
   }
   if (paymentIndex < 0 || paymentIndex >= paymentGroup.length) {
     throw groupInvalid("paymentIndex out of range");
@@ -268,26 +268,33 @@ async function verifyTransaction(
   // Verify all transactions share the same group ID.
   verifyGroupId(transactions);
 
-  // Verify the payment transaction matches the challenge.
+  // Step 4: Verify the payment transaction matches the challenge.
   const paymentTxn = transactions[paymentIndex];
   verifyPaymentDetails(paymentTxn, challenge, recipient);
 
-  // Verify lease if present in challenge.
-  if (challenge.methodDetails.lease) {
-    verifyLease(paymentTxn, challenge.methodDetails.lease);
-  }
-
-  // Safety: check for dangerous fields on all transactions.
+  // Step 5: Check for dangerous fields on all transactions.
   for (const txn of transactions) {
     verifyNoDangerousFields(txn);
   }
 
-  // Fee payer verification and co-signing.
+  // Step 6: Verify lease if present in challenge.
+  if (challenge.methodDetails.lease) {
+    verifyLease(paymentTxn, challenge.methodDetails.lease);
+  }
+
+  // Step 7: Fee payer verification and co-signing.
   let finalGroup = [...paymentGroup];
   if (challenge.methodDetails.feePayer && signer && signerAddress) {
     const feePayerIndex = findFeePayerIndex(transactions, signerAddress);
     if (feePayerIndex === -1) {
       throw feePayerInvalid("Fee payer transaction not found in group");
+    }
+
+    // Step 7.8: Verify fee payer transaction is unsigned.
+    if (decoded[feePayerIndex].type !== "unsigned") {
+      throw feePayerInvalid(
+        "Fee payer transaction must be unsigned (server will sign it)",
+      );
     }
 
     // Resolve fee params from challenge's suggestedParams or use defaults.
@@ -306,7 +313,7 @@ async function verifyTransaction(
       minFee,
     );
 
-    // Verify fee payer transaction.
+    // Verify fee payer transaction structure and fee bounds.
     verifyFeePayerTransaction(
       transactions[feePayerIndex],
       signerAddress,
@@ -346,6 +353,9 @@ async function verifyTransaction(
   // Mark consumed to prevent replay.
   await store.put(`algorand-charge:consumed:${txid}`, true);
 
+  // Note: the spec defines a `challengeId` field in the receipt, but the
+  // mppx Receipt schema does not support it. The challenge binding is
+  // enforced by the mppx framework through the challenge-credential flow.
   return Receipt.from({
     method: "algorand",
     reference: txid,
