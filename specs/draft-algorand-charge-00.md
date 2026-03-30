@@ -106,7 +106,7 @@ payment.
 
 The client sends the signed transaction group to the server
 for broadcast via a `type="transaction"` credential. The
-server verifies, optionally co-signs a fee payer transaction,
+server verifies, optionally signs the fee payer transaction,
 and broadcasts the group to the Algorand network.
 
 --- middle
@@ -152,8 +152,8 @@ complex payment flows without requiring smart contracts.
       |      Payment <credential>|                        |
       |      (signed txn group)  |                        |
       |----------------------->  |                        |
-      |                          |  (5) Co-sign (if fee   |
-      |                          |      payer) + simulate |
+      |                          |  (5) Sign fee payer    |
+      |                          |      txn + simulate    |
       |                          |  (6) Broadcast group   |
       |                          |----------------------> |
       |                          |  (7) Instant finality  |
@@ -169,8 +169,8 @@ fee sponsorship ({{fee-sponsorship}}) and server-side
 verification via simulation before committing to the network.
 When `feePayer` is `true`, the challenge includes
 `feePayerKey` so the client includes a fee payer transaction
-in the group. The server co-signs the fee payer transaction
-before broadcasting. When `feePayer` is `false` or omitted,
+in the group. The server signs the fee payer transaction before
+broadcasting. When `feePayer` is `false` or omitted,
 the client fully signs the group and the server broadcasts
 it as-is.
 
@@ -769,7 +769,7 @@ Upon receiving a request with a credential, the server MUST:
 5. Verify that no transaction in the group contains
    dangerous fields:
 
-   - `close` / `aclose` (close remainder to): MUST be
+   - `close` / `aclose` (close remainder to and asset close to): MUST be
      absent on all transactions.
    - `rekey` (rekey to): MUST be absent on all
      transactions.
@@ -927,7 +927,8 @@ optionally adds a fee payer signature and broadcasts:
       |----------------------->|                          |
       |                        |                          |
       |                        |  (2) If feePayer: true,  |
-      |                        |      verify & co-sign    |
+      |                        |      verify & sign     |
+      |                        |      fee payer txn     |
       |                        |                          |
       |                        |  (3) Simulate group      |
       |                        |----------------------->  |
@@ -947,7 +948,7 @@ optionally adds a fee payer signature and broadcasts:
 1. Client submits credential containing signed transaction
    group.
 2. If `feePayer` is `true`, the server verifies the fee
-   payer transaction and co-signs with its fee payer key.
+   payer transaction and signs it with its fee payer key.
 3. Server simulates the group to catch failures without
    spending fees.
 4. Server broadcasts the group to Algorand.
@@ -1514,7 +1515,7 @@ client includes a zero-amount fee payer transaction from
 `feePayerKey` at index 0 with `fee: 2000`, and partially
 signs only the ASA transfer at index 1. The `lease` field
 is set on the ASA transfer to bind it to the challenge at
-the protocol level. The server co-signs the fee payer
+the protocol level. The server signs the fee payer
 transaction and broadcasts.
 
 Decoded credential:
