@@ -128,7 +128,7 @@ app.listen(PORT, () => {
   const endpoints = [
     { method: 'GET',  path: '/api/v1/weather/:city',            cost: '0.01 ALGO' },
     { method: 'GET',  path: '/api/v1/marketplace/products',     cost: '' },
-    { method: 'GET',  path: '/api/v1/marketplace/buy/:id',      cost: '~0.10-0.18 USDC (splits: seller + platform 5% + referral 2%)' },
+    { method: 'GET',  path: '/api/v1/marketplace/buy/:id',      cost: '0.10-0.17 USDC' },
     { method: 'GET',  path: '/api/v1/health',                   cost: '' },
   ]
   const maxMethod = Math.max(...endpoints.map(e => e.method.length))

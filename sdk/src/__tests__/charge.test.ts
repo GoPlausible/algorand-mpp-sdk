@@ -4,7 +4,7 @@ import { charge } from "../Methods.js";
 import {
   ALGORAND_MAINNET,
   ALGORAND_TESTNET,
-  MIN_TXN_FEE,
+  DEFAULT_MIN_FEE,
   DEFAULT_ALGOD_URLS,
   DEFAULT_INDEXER_URLS,
 } from "../constants.js";
@@ -23,8 +23,8 @@ describe("constants", () => {
     expect(ALGORAND_MAINNET).not.toBe(ALGORAND_TESTNET);
   });
 
-  it("has correct minimum transaction fee", () => {
-    expect(MIN_TXN_FEE).toBe(1000n);
+  it("has correct default minimum fee", () => {
+    expect(DEFAULT_MIN_FEE).toBe(1000n);
   });
 
   it("has default algod URLs for known networks", () => {
@@ -42,11 +42,9 @@ describe("transaction utilities", () => {
   it("builds a native ALGO payment transaction", async () => {
     const { buildPaymentTransaction } =
       await import("../utils/transactions.js");
-    const { Address } = await import("@algorandfoundation/algokit-utils");
     const { TransactionType } =
       await import("@algorandfoundation/algokit-utils/transact");
 
-    // Use zero address as placeholder.
     const sender = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ";
     const receiver =
       "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ";
@@ -60,6 +58,7 @@ describe("transaction utilities", () => {
         lastValid: 1100n,
         genesisHash: new Uint8Array(32),
         genesisId: "testnet-v1.0",
+        minFee: 1000n,
       },
     });
 
@@ -89,6 +88,7 @@ describe("transaction utilities", () => {
         lastValid: 1100n,
         genesisHash: new Uint8Array(32),
         genesisId: "testnet-v1.0",
+        minFee: 1000n,
       },
     });
 
@@ -97,7 +97,7 @@ describe("transaction utilities", () => {
     expect(txn.assetTransfer?.assetId).toBe(31566704n);
   });
 
-  it("builds a fee payer transaction", async () => {
+  it("builds a fee payer transaction with dynamic minFee", async () => {
     const { buildFeePayerTransaction } =
       await import("../utils/transactions.js");
     const { TransactionType } =
@@ -108,49 +108,43 @@ describe("transaction utilities", () => {
 
     const txn = buildFeePayerTransaction({
       feePayerKey,
-      groupSize: 3,
+      groupSize: 2,
       suggestedParams: {
         firstValid: 100n,
         lastValid: 1100n,
         genesisHash: new Uint8Array(32),
         genesisId: "testnet-v1.0",
+        minFee: 1000n,
       },
     });
 
     expect(txn.type).toBe(TransactionType.Payment);
     expect(txn.payment?.amount).toBe(0n);
-    // Fee should cover all 3 transactions: 3 * 1000 = 3000
-    expect(txn.fee).toBe(3000n);
+    // Fee should cover 2 transactions: 2 * 1000 = 2000
+    expect(txn.fee).toBe(2000n);
   });
 
-  it("builds a charge group with splits", async () => {
-    const { buildChargeGroup } = await import("../utils/transactions.js");
+  it("fee payer uses dynamic minFee (not hardcoded)", async () => {
+    const { buildFeePayerTransaction } =
+      await import("../utils/transactions.js");
 
-    const sender = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ";
-    const receiver =
+    const feePayerKey =
       "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ";
 
-    const { transactions, paymentIndex } = buildChargeGroup({
-      sender,
-      receiver,
-      amount: 1_050_000n,
-      reference: "test-ref-123",
-      splits: [{ recipient: receiver, amount: "50000" }],
-      useServerFeePayer: false,
+    const txn = buildFeePayerTransaction({
+      feePayerKey,
+      groupSize: 2,
       suggestedParams: {
         firstValid: 100n,
         lastValid: 1100n,
         genesisHash: new Uint8Array(32),
         genesisId: "testnet-v1.0",
+        minFee: 2000n, // Higher minFee (congestion)
       },
     });
 
-    expect(paymentIndex).toBe(0);
-    expect(transactions.length).toBe(2); // primary + 1 split
-    // All should have same group ID.
-    expect(transactions[0].group).toBeDefined();
-    expect(transactions[1].group).toBeDefined();
-    expect(transactions[0].group).toEqual(transactions[1].group);
+    // Fee should be 2 * 2000 = 4000
+    expect(txn.fee).toBe(4000n);
   });
 
   it("builds a charge group with fee payer", async () => {
@@ -166,7 +160,7 @@ describe("transaction utilities", () => {
       sender,
       receiver,
       amount: 1_000_000n,
-      reference: "test-ref-456",
+      challengeReference: "test-ref-456",
       useServerFeePayer: true,
       feePayerKey,
       suggestedParams: {
@@ -174,6 +168,7 @@ describe("transaction utilities", () => {
         lastValid: 1100n,
         genesisHash: new Uint8Array(32),
         genesisId: "testnet-v1.0",
+        minFee: 1000n,
       },
     });
 
@@ -182,6 +177,64 @@ describe("transaction utilities", () => {
     expect(transactions.length).toBe(2);
     expect(transactions[0].payment?.amount).toBe(0n); // Fee payer: zero amount.
     expect(transactions[1].payment?.amount).toBe(1_000_000n); // Primary payment.
+  });
+
+  it("builds a charge group with lease", async () => {
+    const { buildChargeGroup } = await import("../utils/transactions.js");
+
+    const sender = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ";
+    const receiver =
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ";
+
+    const lease = new Uint8Array(32);
+    lease[0] = 0x42;
+
+    const { transactions, paymentIndex } = buildChargeGroup({
+      sender,
+      receiver,
+      amount: 1_000_000n,
+      challengeReference: "test-ref-lease",
+      lease,
+      useServerFeePayer: false,
+      suggestedParams: {
+        firstValid: 100n,
+        lastValid: 1100n,
+        genesisHash: new Uint8Array(32),
+        genesisId: "testnet-v1.0",
+        minFee: 1000n,
+      },
+    });
+
+    expect(paymentIndex).toBe(0);
+    expect(transactions.length).toBe(1);
+    expect(transactions[0].lease).toBeDefined();
+    expect(transactions[0].lease![0]).toBe(0x42);
+  });
+
+  it("charge group note includes challengeReference", async () => {
+    const { buildChargeGroup } = await import("../utils/transactions.js");
+
+    const sender = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ";
+    const receiver =
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ";
+
+    const { transactions, paymentIndex } = buildChargeGroup({
+      sender,
+      receiver,
+      amount: 1_000_000n,
+      challengeReference: "my-challenge-ref",
+      useServerFeePayer: false,
+      suggestedParams: {
+        firstValid: 100n,
+        lastValid: 1100n,
+        genesisHash: new Uint8Array(32),
+        genesisId: "testnet-v1.0",
+        minFee: 1000n,
+      },
+    });
+
+    const note = new TextDecoder().decode(transactions[paymentIndex].note);
+    expect(note).toBe("mppx:my-challenge-ref");
   });
 
   it("base64 encode/decode roundtrip", async () => {

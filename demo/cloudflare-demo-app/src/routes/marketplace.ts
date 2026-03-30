@@ -31,9 +31,6 @@ const PRODUCTS: Record<
   },
 }
 
-const PLATFORM_FEE_BPS = 500 // 5%
-const REFERRAL_FEE_BPS = 200 // 2%
-
 export function marketplaceRoutes(secretKey: string, feePayer: FeePayer | null, platformAddress: string) {
   const app = new Hono<{ Bindings: Env }>()
 
@@ -49,44 +46,11 @@ export function marketplaceRoutes(secretKey: string, feePayer: FeePayer | null, 
     return c.json(list)
   })
 
-  // Purchase with splits
+  // Purchase — USDC payment to platform
   app.get('/api/v1/marketplace/buy/:productId', async (c) => {
     const product = PRODUCTS[c.req.param('productId')]
     if (!product) {
       return c.json({ error: 'Product not found' }, 404)
-    }
-
-    const referrer = c.req.query('referrer')
-
-    // Validate referrer is opted in to USDC
-    if (referrer) {
-      try {
-        const acctRes = await fetch(`${TESTNET_ALGOD_URL}/v2/accounts/${referrer}`)
-        const acctData = (await acctRes.json()) as { assets?: Array<{ 'asset-id': number }> }
-        const hasUsdc = acctData.assets?.some((a) => a['asset-id'] === Number(USDC_ASA_ID))
-        if (!hasUsdc) {
-          return c.json({
-            error: 'Referrer not opted in to USDC',
-            detail: `Account ${referrer} must opt in to ASA ${USDC_ASA_ID} (TestNet USDC) before receiving referral payments.`,
-            faucet: 'https://faucet.circle.com/',
-          }, 400)
-        }
-      } catch {
-        return c.json({ error: 'Could not verify referrer account' }, 400)
-      }
-    }
-
-    // Compute splits
-    const platformFee = Math.floor((product.price * PLATFORM_FEE_BPS) / 10_000)
-    const referralFee = referrer ? Math.floor((product.price * REFERRAL_FEE_BPS) / 10_000) : 0
-    const totalAmount = product.price + platformFee + referralFee
-
-    const splits: Array<{ recipient: string; amount: string; memo?: string }> = [
-      { recipient: platformAddress, amount: String(platformFee), memo: 'platform fee (5%)' },
-    ]
-
-    if (referrer) {
-      splits.push({ recipient: referrer, amount: String(referralFee), memo: 'referral (2%)' })
     }
 
     const mppx = Mppx.create({
@@ -99,7 +63,6 @@ export function marketplaceRoutes(secretKey: string, feePayer: FeePayer | null, 
           indexerUrl: TESTNET_INDEXER_URL,
           asaId: USDC_ASA_ID,
           decimals: USDC_DECIMALS,
-          splits,
           ...(feePayer ? {
             signer: feePayer.signer,
             signerAddress: feePayer.address,
@@ -109,7 +72,7 @@ export function marketplaceRoutes(secretKey: string, feePayer: FeePayer | null, 
     })
 
     const result = await mppx.charge({
-      amount: String(totalAmount),
+      amount: String(product.price),
       currency: 'USDC',
       description: `Purchase: ${product.name}`,
     })(c.req.raw)
@@ -121,12 +84,7 @@ export function marketplaceRoutes(secretKey: string, feePayer: FeePayer | null, 
     return result.withReceipt(
       Response.json({
         product: product.name,
-        breakdown: {
-          seller: `${(product.price / 1_000_000).toFixed(2)} USDC`,
-          platformFee: `${(platformFee / 1_000_000).toFixed(2)} USDC`,
-          ...(referrer ? { referralFee: `${(referralFee / 1_000_000).toFixed(2)} USDC` } : {}),
-          total: `${(totalAmount / 1_000_000).toFixed(2)} USDC`,
-        },
+        price: `${(product.price / 1_000_000).toFixed(2)} USDC`,
         status: 'purchased',
       }),
     ) as Response

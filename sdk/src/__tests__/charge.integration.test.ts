@@ -76,7 +76,6 @@ function createMppx(opts: {
   decimals?: number;
   signer?: TransactionSigner;
   signerAddress?: string;
-  splits?: Array<{ recipient: string; amount: string; memo?: string }>;
 }) {
   return Mppx.create({
     secretKey: "test-secret-key-for-integration-tests",
@@ -93,7 +92,6 @@ function createMppx(opts: {
               signerAddress: opts.signerAddress,
             }
           : {}),
-        ...(opts.splits ? { splits: opts.splits } : {}),
       }),
     ],
   });
@@ -164,7 +162,7 @@ describe("Server: challenge issuance", () => {
     expect(body).toHaveProperty("challengeId");
   });
 
-  it.skipIf(!hasKey)("challenge includes suggestedParams", async () => {
+  it.skipIf(!hasKey)("challenge includes suggestedParams with minFee", async () => {
     const mppx = createMppx({
       recipient: recipientAddress,
       signer: feePayerSigner,
@@ -201,10 +199,13 @@ describe("Server: challenge issuance", () => {
     expect(requestData.methodDetails?.suggestedParams).toHaveProperty(
       "genesisId",
     );
+    expect(requestData.methodDetails?.suggestedParams).toHaveProperty(
+      "minFee",
+    );
   });
 
   it.skipIf(!hasKey)(
-    "challenge includes feePayerKey when signer configured",
+    "challenge includes challengeReference and lease",
     async () => {
       const mppx = createMppx({
         recipient: recipientAddress,
@@ -222,8 +223,24 @@ describe("Server: challenge issuance", () => {
       const requestMatch = wwwAuth.match(/request="([^"]+)"/);
       const requestData = JSON.parse(
         Buffer.from(requestMatch![1], "base64url").toString(),
-      ) as { methodDetails?: { feePayer?: boolean; feePayerKey?: string } };
+      ) as {
+        methodDetails?: {
+          challengeReference?: string;
+          lease?: string;
+          feePayer?: boolean;
+          feePayerKey?: string;
+        };
+      };
 
+      expect(requestData.methodDetails?.challengeReference).toBeDefined();
+      expect(requestData.methodDetails?.challengeReference).toMatch(
+        /^[0-9a-f-]{36}$/,
+      );
+      expect(requestData.methodDetails?.lease).toBeDefined();
+      // Lease should be base64 (SHA-256 output = 32 bytes → 44 chars in base64)
+      expect(requestData.methodDetails?.lease!.length).toBeGreaterThanOrEqual(
+        40,
+      );
       expect(requestData.methodDetails?.feePayer).toBe(true);
       expect(requestData.methodDetails?.feePayerKey).toBe(feePayerAddress);
     },
@@ -251,20 +268,6 @@ describe("Server: address validation", () => {
     ).toThrow("Invalid fee payer");
   });
 
-  it("rejects splits exceeding max count", () => {
-    const splits = Array.from({ length: 8 }, () => ({
-      recipient: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ",
-      amount: "1000",
-    }));
-    expect(() =>
-      charge({
-        recipient: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ",
-        network: ALGORAND_TESTNET,
-        splits,
-      }),
-    ).toThrow("splits cannot exceed 7");
-  });
-
   it("rejects asaId without decimals", () => {
     expect(() =>
       charge({
@@ -282,7 +285,7 @@ describe("Client: transaction building", () => {
       sender: feePayerAddress,
       receiver: recipientAddress,
       amount: 10000n,
-      reference: "test-ref",
+      challengeReference: "test-ref",
       useServerFeePayer: true,
       feePayerKey: feePayerAddress,
       suggestedParams: {
@@ -290,6 +293,7 @@ describe("Client: transaction building", () => {
         lastValid: 1100n,
         genesisHash: new Uint8Array(32),
         genesisId: "testnet-v1.0",
+        minFee: 1000n,
       },
     });
 
@@ -304,52 +308,33 @@ describe("Client: transaction building", () => {
     expect(result.transactions[0].group).toEqual(result.transactions[1].group);
   });
 
-  it.skipIf(!hasKey)("builds USDC charge group with splits", () => {
+  it.skipIf(!hasKey)("builds charge group with lease", () => {
+    const lease = new Uint8Array(32);
+    lease.fill(0xab);
+
     const result = buildChargeGroup({
       sender: feePayerAddress,
       receiver: recipientAddress,
-      amount: 178500n, // 0.17 + 5% platform
-      asaId: USDC_ASA_ID,
-      reference: "test-ref-splits",
+      amount: 10000n,
+      challengeReference: "test-ref-lease",
+      lease,
       useServerFeePayer: true,
       feePayerKey: feePayerAddress,
-      splits: [
-        { recipient: recipientAddress, amount: "8500" }, // platform fee
-      ],
       suggestedParams: {
         firstValid: 100n,
         lastValid: 1100n,
         genesisHash: new Uint8Array(32),
         genesisId: "testnet-v1.0",
+        minFee: 1000n,
       },
     });
 
-    // fee payer + primary payment + 1 split = 3 transactions
-    expect(result.transactions.length).toBe(3);
-    expect(result.paymentIndex).toBe(1);
-  });
-
-  it("rejects splits > 7", () => {
-    const splits = Array.from({ length: 8 }, () => ({
-      recipient: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ",
-      amount: "1000",
-    }));
-    expect(() =>
-      buildChargeGroup({
-        sender: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ",
-        receiver: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ",
-        amount: 10000n,
-        reference: "test",
-        useServerFeePayer: false,
-        splits,
-        suggestedParams: {
-          firstValid: 100n,
-          lastValid: 1100n,
-          genesisHash: new Uint8Array(32),
-          genesisId: "testnet-v1.0",
-        },
-      }),
-    ).toThrow("splits cannot exceed 7");
+    expect(result.transactions.length).toBe(2);
+    // Payment transaction (index 1) should have lease
+    expect(result.transactions[result.paymentIndex].lease).toBeDefined();
+    expect(result.transactions[result.paymentIndex].lease![0]).toBe(0xab);
+    // Fee payer transaction (index 0) should NOT have lease
+    expect(result.transactions[0].lease).toBeUndefined();
   });
 });
 
@@ -364,7 +349,7 @@ describe("Encoding: transaction roundtrip", () => {
         sender: feePayerAddress,
         receiver: recipientAddress,
         amount: 10000n,
-        reference: "encode-test",
+        challengeReference: "encode-test",
         useServerFeePayer: true,
         feePayerKey: feePayerAddress,
         suggestedParams: {
@@ -372,6 +357,7 @@ describe("Encoding: transaction roundtrip", () => {
           lastValid: 1100n,
           genesisHash: new Uint8Array(32),
           genesisId: "testnet-v1.0",
+          minFee: 1000n,
         },
       });
 
@@ -439,21 +425,28 @@ describe("End-to-end: full ALGO payment flow (TestNet)", () => {
             lastValid: number;
             genesisHash: string;
             genesisId: string;
+            minFee: number;
           };
           feePayer: boolean;
           feePayerKey: string;
-          reference: string;
+          challengeReference: string;
+          lease?: string;
         };
         recipient: string;
       };
 
       // Step 3: Build transaction group
       const sp = challengeRequest.methodDetails.suggestedParams;
+      const lease = challengeRequest.methodDetails.lease
+        ? base64ToUint8Array(challengeRequest.methodDetails.lease)
+        : undefined;
+
       const group = buildChargeGroup({
         sender: feePayerAddress,
         receiver: challengeRequest.recipient,
         amount: BigInt(challengeRequest.amount),
-        reference: challengeRequest.methodDetails.reference,
+        challengeReference: challengeRequest.methodDetails.challengeReference,
+        lease,
         useServerFeePayer: challengeRequest.methodDetails.feePayer,
         feePayerKey: challengeRequest.methodDetails.feePayerKey,
         suggestedParams: {
@@ -461,6 +454,7 @@ describe("End-to-end: full ALGO payment flow (TestNet)", () => {
           lastValid: BigInt(sp.lastValid),
           genesisHash: base64ToUint8Array(sp.genesisHash),
           genesisId: sp.genesisId,
+          minFee: BigInt(sp.minFee),
         },
       });
 

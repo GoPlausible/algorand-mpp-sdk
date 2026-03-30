@@ -17,11 +17,10 @@ export const ENDPOINTS: Endpoint[] = [
   {
     method: 'GET',
     path: '/api/v1/marketplace/buy/:productId',
-    description: 'Marketplace purchase (splits)',
-    cost: '0.10-0.17 USDC + fees',
+    description: 'Marketplace purchase (USDC)',
+    cost: '0.10-0.17 USDC',
     params: [
       { name: 'productId', default: 'algo-hoodie' },
-      { name: 'referrer', default: '' },
     ],
   },
 ]

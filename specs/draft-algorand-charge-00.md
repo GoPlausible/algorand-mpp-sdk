@@ -509,11 +509,17 @@ suggestedParams
     MUST match the `network` genesis hash.
   - `genesisId` (string): Genesis ID string (e.g.,
     "mainnet-v1.0", "testnet-v1.0").
-  - `minFee` (number): The current network minimum fee
-    per transaction in microalgos, as returned by
-    `v2/transactions/params`. Clients MUST use this
-    value (not a hardcoded constant) when computing
-    the pooled fee for the fee payer transaction.
+  - `fee` (number): The current suggested fee per byte
+    in microalgos, as returned by `v2/transactions/params`.
+    Under normal (non-congested) conditions this is `0`.
+    Under congestion, this value increases, making
+    transaction fees dependent on serialized size.
+  - `minFee` (number): The network minimum fee per
+    transaction in microalgos, as returned by
+    `v2/transactions/params`. Clients MUST use these
+    values to compute per-transaction fees using
+    `max(fee * txn_size_in_bytes, minFee)` and MUST
+    NOT hardcode fee constants.
 
 ### Native ALGO Example
 
@@ -714,13 +720,49 @@ the server commits to paying Algorand transaction fees on behalf
 of the client. This section describes the fee sponsorship
 mechanism using Algorand's native fee pooling.
 
+## Fee Calculation
+
+The algod REST API's `v2/transactions/params` endpoint
+returns two fee-related parameters: `fee` (the current
+suggested fee per byte in microalgos) and `min-fee` (the
+network minimum fee per transaction). The required fee
+for each transaction is computed as:
+
+~~~
+required_fee = max(fee_per_byte * transaction_size_in_bytes,
+                   min_fee)
+~~~
+
+Under normal (non-congested) network conditions,
+`fee_per_byte` equals `0`, simplifying the formula to:
+
+~~~
+required_fee = max(0, min_fee) = min_fee
+~~~
+
+This is why standard Algorand transactions cost 0.001 ALGO
+(1000 microalgos) during normal conditions. Under network
+congestion, `fee_per_byte` increases, making fees dependent
+on the serialized transaction size in bytes.
+
 ## Fee Pooling
 
-Algorand supports fee pooling within atomic transaction groups:
-the total fees paid across all transactions in a group must meet
-or exceed the total minimum fee for the group. This means a
-single transaction can cover the fees for all transactions in
-the group by setting a sufficiently high fee value.
+Algorand supports fee pooling within atomic transaction
+groups: the sum of all `fee` fields across all transactions
+in the group must meet or exceed the sum of all individual
+transaction required fees. This means a single transaction
+can cover the fees for all transactions in the group by
+setting a sufficiently high fee value. The pooled fee
+requirement is:
+
+~~~
+sum(fee[i] for i in group) >= sum(required_fee[i] for i
+                                  in group)
+~~~
+
+Under normal conditions (where `fee_per_byte` is 0), this
+simplifies to `sum(fees) >= N * min_fee`. Under congestion,
+larger serialized transactions may require higher fees.
 
 ## Server-Paid Fees
 
@@ -730,19 +772,16 @@ When `feePayer` is `true`:
    transaction(s) with `fee` set to `0` and `flatFee` set to
    `true`. The client also includes an unsigned transaction
    from the server's `feePayerKey` address: a zero-amount
-   ALGO payment (`type: pay`) to itself. Algorand validates
-   fees via fee pooling: the sum of all `fee` fields in the
-   group must meet or exceed `N * minFee`, where `N` is the
-   number of transactions and `minFee` is the current network
-   minimum fee (queried via `v2/transactions/params`). Since
-   client transactions set `fee` to `0`, the fee payer
-   transaction MUST carry the entire pooled fee. Under normal
-   conditions, `N * minFee` suffices. Under network
-   congestion, the effective minimum may increase; the server
-   MAY adjust the fee payer transaction's fee before signing
-   to account for congestion pricing without invalidating
-   client signatures (since the fee payer transaction is
-   unsigned when received from the client).
+   ALGO payment (`type: pay`) to itself. Since client
+   transactions set `fee` to `0`, the fee payer transaction
+   MUST carry the entire pooled fee. Under normal conditions,
+   `N * minFee` (where `N` is the number of transactions)
+   suffices. Under network congestion, the effective required
+   fee may be higher due to `fee_per_byte` scaling with
+   serialized transaction size; the server MAY adjust the fee
+   payer transaction's fee before signing to account for this
+   without invalidating client signatures (since the fee payer
+   transaction is unsigned when received from the client).
 
 2. **Client signs payment transaction(s)**: The client signs
    only its own transaction(s) in the group. The fee payer
@@ -901,12 +940,14 @@ servers MUST check:
 
 6. The `rekey` (rekey to) field is absent.
 
-7. The `fee` covers the group's pooled minimum (at least
-   `N * minFee` where `N` is the group size and `minFee`
-   is the current network minimum fee from
-   `v2/transactions/params`) and does not exceed a
-   server-configured maximum (e.g., `N * minFee * 3` as
-   a safety bound against fee griefing).
+7. The `fee` covers the group's pooled minimum. The server
+   computes each transaction's required fee as
+   `max(fee_per_byte * txn_size, min_fee)` using current
+   values from `v2/transactions/params`, then verifies the
+   fee payer transaction's `fee` meets or exceeds the sum
+   of all required fees. The fee MUST NOT exceed a
+   server-configured maximum (e.g., 3x the computed
+   pooled minimum) as a safety bound against fee griefing.
 
 8. The transaction is unsigned (the server will sign it).
 
@@ -1160,11 +1201,13 @@ When `feePayer` is `true` in the challenge:
 
 - The client MUST include an unsigned `pay` transaction
   from `feePayerKey` to itself with `amt` of `0` and
-  `fee` set to cover the entire group's pooled fees
-  (at least `N * minFee` where `N` is the group size
-  and `minFee` is obtained from `suggestedParams` or
-  the `v2/transactions/params` endpoint). Clients
-  MUST NOT hardcode fee values.
+  `fee` set to cover the entire group's pooled fees.
+  Each transaction's required fee is computed as
+  `max(fee_per_byte * txn_size, min_fee)` using values
+  from `suggestedParams` or `v2/transactions/params`.
+  The fee payer's `fee` MUST be at least the sum of all
+  required fees in the group. Clients MUST NOT hardcode
+  fee values.
 - The client MUST set `fee` to `0` and `flatFee` to
   `true` on its own transaction(s).
 - The fee payer transaction SHOULD be the first
@@ -1173,10 +1216,12 @@ When `feePayer` is `true` in the challenge:
 When `feePayer` is `false` or absent:
 
 - The client MUST ensure the group's total fees meet
-  or exceed `N * minFee`, either by setting `fee` to
-  at least `minFee` on each transaction, or by using
-  Algorand's fee pooling to concentrate fees on a
-  single transaction in the group.
+  or exceed the sum of all per-transaction required
+  fees (`max(fee_per_byte * txn_size, min_fee)` per
+  transaction), either by setting an appropriate `fee`
+  on each transaction, or by using Algorand's fee
+  pooling to concentrate fees on a single transaction
+  in the group.
 - The client MUST fully sign all transactions in the
   group.
 
@@ -1688,6 +1733,7 @@ sU3oK8nM1bZ=",
       "genesisHash": "wGHE2Pwdvd7S12BL5FaOP20EGYesN73k\
 tiC1qzkkit8=",
       "genesisId": "mainnet-v1.0",
+      "fee": 0,
       "minFee": 1000
     }
   }
@@ -1695,9 +1741,11 @@ tiC1qzkkit8=",
 ~~~
 
 The client uses `suggestedParams` from the challenge (no RPC
-call needed), computes the pooled fee as `N * minFee`
-(2 * 1000 = 2000 microalgos for this 2-transaction group),
-includes a zero-amount fee payer transaction from
+call needed). Since `fee` (fee per byte) is `0` (no
+congestion), each transaction's required fee is
+`max(0 * size, 1000) = 1000`. The pooled fee for this
+2-transaction group is `2 * 1000 = 2000` microalgos. The
+client includes a zero-amount fee payer transaction from
 `feePayerKey` at index 0 with `fee: 2000`, and partially
 signs only the ASA transfer at index 1. The `lease` field
 is set on the ASA transfer to bind it to the challenge at

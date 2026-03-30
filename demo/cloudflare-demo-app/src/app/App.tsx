@@ -428,7 +428,7 @@ export default function App() {
       {isMarketplace && products.length > 0 && (
         <div style={s.showcaseSection}>
           <div style={{...s.showcaseTitle, color: t.text}}>Products</div>
-          <div style={{...s.showcaseSub, color: t.muted}}>USDC with splits (seller + 5% platform + 2% referral)</div>
+          <div style={{...s.showcaseSub, color: t.muted}}>USDC payments</div>
           <div style={s.productGrid}>
             {products.map((p) => (
               <button

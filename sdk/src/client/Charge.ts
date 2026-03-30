@@ -55,11 +55,11 @@ export function charge(parameters: charge.Parameters) {
         network,
         asaId,
         decimals,
-        reference,
+        challengeReference,
         feePayer: serverPaysFees,
         feePayerKey,
+        lease: leaseB64,
         suggestedParams: serverSuggestedParams,
-        splits,
       } = methodDetails;
 
       const resolvedNetwork = network || ALGORAND_MAINNET;
@@ -86,15 +86,18 @@ export function charge(parameters: charge.Parameters) {
         algodUrl,
       );
 
+      // Decode lease if present.
+      const lease = leaseB64 ? base64ToUint8Array(leaseB64) : undefined;
+
       // Build the transaction group.
       const { transactions, paymentIndex } = buildChargeGroup({
         sender: senderAddress,
         receiver: recipient,
         amount: BigInt(amount),
         asaId: asaId ? BigInt(asaId) : undefined,
-        reference,
+        challengeReference,
         externalId: challenge.request.externalId,
-        splits,
+        lease,
         useServerFeePayer: !!useServerFeePayer,
         feePayerKey,
         suggestedParams: txnParams,

@@ -14,7 +14,7 @@ import {
   ALGORAND_MAINNET,
   DEFAULT_ALGOD_URLS,
   DEFAULT_INDEXER_URLS,
-  MIN_TXN_FEE,
+  DEFAULT_MIN_FEE,
   NETWORK_GENESIS_HASH,
 } from "../constants.js";
 import * as Methods from "../Methods.js";
@@ -122,7 +122,6 @@ export function charge(parameters: charge.Parameters) {
     decimals,
     network = ALGORAND_MAINNET,
     store = Store.memory(),
-    splits,
     signer,
     signerAddress,
   } = parameters;
@@ -149,29 +148,16 @@ export function charge(parameters: charge.Parameters) {
       throw new Error(`Invalid fee payer (signerAddress): ${signerAddress}`);
     }
   }
-  if (splits) {
-    for (const split of splits) {
-      try {
-        Address.fromString(split.recipient);
-      } catch {
-        throw new Error(`Invalid split recipient address: ${split.recipient}`);
-      }
-    }
-  }
 
   if (asaId && decimals === undefined) {
     throw new Error("decimals is required when asaId is set");
-  }
-
-  if (splits && splits.length > 7) {
-    throw new Error("splits cannot exceed 7 entries");
   }
 
   return Method.toServer(Methods.charge, {
     defaults: {
       currency: asaId ? "ASA" : "ALGO",
       methodDetails: {
-        reference: "",
+        challengeReference: "",
       },
       recipient: "",
     },
@@ -181,7 +167,19 @@ export function charge(parameters: charge.Parameters) {
         return credential.challenge.request as typeof request;
       }
 
-      const reference = crypto.randomUUID();
+      const challengeReference = crypto.randomUUID();
+
+      // Derive lease from challengeReference: SHA-256(challengeReference).
+      const leaseBytes = new Uint8Array(
+        await crypto.subtle.digest(
+          "SHA-256",
+          new TextEncoder().encode(challengeReference),
+        ),
+      );
+      const leaseB64 =
+        typeof Buffer !== "undefined"
+          ? Buffer.from(leaseBytes).toString("base64")
+          : btoa(String.fromCharCode(...leaseBytes));
 
       // Fetch suggested params (MUST be present per spec).
       // Failure propagates as a 500 — the server cannot issue a
@@ -194,24 +192,26 @@ export function charge(parameters: charge.Parameters) {
         "genesis-hash": string;
         "genesis-id": string;
         "last-round": number;
+        "min-fee": number;
       };
       const suggestedParams = {
         firstValid: data["last-round"],
         lastValid: data["last-round"] + 1000,
         genesisHash: data["genesis-hash"],
         genesisId: data["genesis-id"],
+        minFee: data["min-fee"] || Number(DEFAULT_MIN_FEE),
       };
 
       return {
         ...request,
         methodDetails: {
           network,
-          reference,
+          challengeReference,
+          lease: leaseB64,
           ...(asaId ? { asaId: String(asaId), decimals } : {}),
           ...(signer && signerAddress
             ? { feePayer: true, feePayerKey: signerAddress }
             : {}),
-          ...(splits?.length ? { splits } : {}),
           suggestedParams,
         },
         recipient,
@@ -242,7 +242,7 @@ export function charge(parameters: charge.Parameters) {
         );
       }
 
-      return await verifyTxid(cred, challenge, indexerUrl, recipient, store);
+      return await verifyTxid(cred, challenge, algodUrl, indexerUrl, recipient, store);
     },
   });
 }
@@ -317,9 +317,9 @@ async function verifyTransaction(
   const paymentTxn = transactions[paymentIndex];
   verifyPaymentDetails(paymentTxn, challenge, recipient);
 
-  // Verify splits if present.
-  if (challenge.methodDetails.splits?.length) {
-    verifySplits(transactions, paymentIndex, challenge);
+  // Verify lease if present in challenge.
+  if (challenge.methodDetails.lease) {
+    verifyLease(paymentTxn, challenge.methodDetails.lease);
   }
 
   // Safety: check for dangerous fields on all transactions.
@@ -335,11 +335,17 @@ async function verifyTransaction(
       throw feePayerInvalid("Fee payer transaction not found in group");
     }
 
+    // Resolve minFee from challenge's suggestedParams or use default.
+    const minFee = challenge.methodDetails.suggestedParams?.minFee
+      ? BigInt(challenge.methodDetails.suggestedParams.minFee)
+      : DEFAULT_MIN_FEE;
+
     // Verify fee payer transaction.
     verifyFeePayerTransaction(
       transactions[feePayerIndex],
       signerAddress,
       transactions.length,
+      minFee,
     );
 
     // Verify client transactions have fee=0 when fee payer is present (per spec).
@@ -388,6 +394,7 @@ async function verifyTransaction(
 async function verifyTxid(
   credential: CredentialPayload,
   challenge: ChallengeRequest,
+  algodUrl: string,
   indexerUrl: string,
   recipient: string,
   store: Store.Store,
@@ -410,14 +417,22 @@ async function verifyTxid(
     throw txidConsumed("Transaction identifier already consumed");
   }
 
-  // Fetch transaction from indexer.
-  const tx = await fetchTransactionFromIndexer(indexerUrl, txid);
+  // Fetch transaction: algod pending first, then indexer fallback with retry.
+  const tx = await fetchTransactionWithRetry(algodUrl, indexerUrl, txid);
   if (!tx) {
     throw transactionNotFound("Transaction not found or not yet confirmed");
   }
 
   // Verify transfer details.
   verifyOnChainTransaction(tx, challenge, recipient);
+
+  // Verify lease if present in challenge.
+  if (challenge.methodDetails.lease && tx.lease) {
+    const expectedLease = challenge.methodDetails.lease;
+    if (tx.lease !== expectedLease) {
+      throw transferMismatch("On-chain transaction lease does not match expected value");
+    }
+  }
 
   // Mark consumed.
   await store.put(consumedKey, true);
@@ -452,15 +467,7 @@ function verifyPaymentDetails(
   recipient: string,
 ) {
   const { asaId } = challenge.methodDetails;
-  const splits = challenge.methodDetails.splits ?? [];
-  const splitsTotal = splits.reduce((sum, s) => sum + BigInt(s.amount), 0n);
-  const primaryAmount = BigInt(challenge.amount) - splitsTotal;
-
-  if (primaryAmount <= 0n) {
-    throw transferMismatch(
-      "Splits consume the entire amount — primary recipient must receive a positive amount",
-    );
-  }
+  const expectedAmount = BigInt(challenge.amount);
 
   if (asaId) {
     if (txn.type !== TransactionType.AssetTransfer) {
@@ -476,9 +483,9 @@ function verifyPaymentDetails(
         `ASA ID mismatch: expected ${asaId}, got ${txn.assetTransfer.assetId}`,
       );
     }
-    if (txn.assetTransfer.amount !== primaryAmount) {
+    if (txn.assetTransfer.amount !== expectedAmount) {
       throw transferMismatch(
-        `Amount mismatch: expected ${primaryAmount}, got ${txn.assetTransfer.amount}`,
+        `Amount mismatch: expected ${expectedAmount}, got ${txn.assetTransfer.amount}`,
       );
     }
     if (txn.assetTransfer.receiver.toString() !== recipient) {
@@ -493,9 +500,9 @@ function verifyPaymentDetails(
     if (!txn.payment) {
       throw transferMismatch("Missing payment fields");
     }
-    if (txn.payment.amount !== primaryAmount) {
+    if (txn.payment.amount !== expectedAmount) {
       throw transferMismatch(
-        `Amount mismatch: expected ${primaryAmount}, got ${txn.payment.amount}`,
+        `Amount mismatch: expected ${expectedAmount}, got ${txn.payment.amount}`,
       );
     }
     if (txn.payment.receiver.toString() !== recipient) {
@@ -506,37 +513,24 @@ function verifyPaymentDetails(
   }
 }
 
-function verifySplits(
-  transactions: Transaction[],
-  paymentIndex: number,
-  challenge: ChallengeRequest,
-) {
-  const splits = challenge.methodDetails.splits!;
-  const { asaId } = challenge.methodDetails;
+function verifyLease(txn: Transaction, expectedLeaseB64: string) {
+  const expectedLease =
+    typeof Buffer !== "undefined"
+      ? new Uint8Array(Buffer.from(expectedLeaseB64, "base64"))
+      : (() => {
+          const binary = atob(expectedLeaseB64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          return bytes;
+        })();
 
-  for (const split of splits) {
-    const found = transactions.some((txn, idx) => {
-      if (idx === paymentIndex) return false; // Skip primary payment.
-      if (asaId) {
-        return (
-          txn.type === TransactionType.AssetTransfer &&
-          txn.assetTransfer?.receiver.toString() === split.recipient &&
-          txn.assetTransfer?.amount === BigInt(split.amount) &&
-          txn.assetTransfer?.assetId === BigInt(asaId)
-        );
-      }
-      return (
-        txn.type === TransactionType.Payment &&
-        txn.payment?.receiver.toString() === split.recipient &&
-        txn.payment?.amount === BigInt(split.amount)
-      );
-    });
-
-    if (!found) {
-      throw transferMismatch(
-        `Missing split transfer for recipient ${split.recipient} amount ${split.amount}`,
-      );
-    }
+  if (!txn.lease) {
+    throw transferMismatch("Payment transaction is missing lease (lx) field");
+  }
+  if (!arraysEqual(txn.lease, expectedLease)) {
+    throw transferMismatch("Payment transaction lease does not match expected value");
   }
 }
 
@@ -568,6 +562,7 @@ function verifyFeePayerTransaction(
   txn: Transaction,
   feePayerAddress: string,
   groupSize: number,
+  minFee: bigint,
 ) {
   if (txn.type !== TransactionType.Payment) {
     throw feePayerInvalid(
@@ -594,9 +589,9 @@ function verifyFeePayerTransaction(
   if (txn.rekeyTo) {
     throw dangerousTransaction("Fee payer transaction must not have rekeyTo");
   }
-  // Verify fee is reasonable: must be at least N*minFee, no more than N*minFee*2 (safety multiplier).
-  const expectedFee = BigInt(groupSize) * MIN_TXN_FEE;
-  const maxReasonableFee = expectedFee * 2n;
+  // Verify fee covers pooled minimum (N * minFee) with server-configured safety bound (N * minFee * 3).
+  const expectedFee = BigInt(groupSize) * minFee;
+  const maxReasonableFee = expectedFee * 3n;
   if (txn.fee !== undefined && txn.fee < expectedFee) {
     throw feePayerInvalid(
       `Fee payer fee ${txn.fee} is below minimum ${expectedFee} for group of ${groupSize}`,
@@ -615,9 +610,7 @@ function verifyOnChainTransaction(
   recipient: string,
 ) {
   const { asaId } = challenge.methodDetails;
-  const splits = challenge.methodDetails.splits ?? [];
-  const splitsTotal = splits.reduce((sum, s) => sum + BigInt(s.amount), 0n);
-  const primaryAmount = BigInt(challenge.amount) - splitsTotal;
+  const expectedAmount = BigInt(challenge.amount);
 
   if (asaId) {
     if (tx["tx-type"] !== "axfer") {
@@ -632,9 +625,9 @@ function verifyOnChainTransaction(
         `ASA ID mismatch: expected ${asaId}, got ${xfer["asset-id"]}`,
       );
     }
-    if (BigInt(xfer.amount) !== primaryAmount) {
+    if (BigInt(xfer.amount) !== expectedAmount) {
       throw transferMismatch(
-        `Amount mismatch: expected ${primaryAmount}, got ${xfer.amount}`,
+        `Amount mismatch: expected ${expectedAmount}, got ${xfer.amount}`,
       );
     }
     if (xfer.receiver !== recipient) {
@@ -648,9 +641,9 @@ function verifyOnChainTransaction(
     }
     const pay = tx["payment-transaction"];
     if (!pay) throw transferMismatch("Missing payment-transaction");
-    if (BigInt(pay.amount) !== primaryAmount) {
+    if (BigInt(pay.amount) !== expectedAmount) {
       throw transferMismatch(
-        `Amount mismatch: expected ${primaryAmount}, got ${pay.amount}`,
+        `Amount mismatch: expected ${expectedAmount}, got ${pay.amount}`,
       );
     }
     if (pay.receiver !== recipient) {
@@ -758,18 +751,113 @@ async function waitForConfirmation(
   throw transactionFailed("Transaction confirmation timeout");
 }
 
+/**
+ * Fetch a confirmed transaction: algod pending endpoint first, indexer fallback.
+ * Retries with exponential backoff up to ~10s per spec.
+ */
+async function fetchTransactionWithRetry(
+  algodUrl: string,
+  indexerUrl: string,
+  txid: string,
+): Promise<IndexerTransaction | null> {
+  // Try algod pending endpoint first (most recent confirmed round).
+  const pendingTx = await fetchTransactionFromAlgod(algodUrl, txid);
+  if (pendingTx) return pendingTx;
+
+  // Retry with exponential backoff: 1s, 2s, 4s (~7s total, under 10s).
+  const delays = [1000, 2000, 4000];
+  for (const delay of delays) {
+    await new Promise((r) => setTimeout(r, delay));
+
+    const algodTx = await fetchTransactionFromAlgod(algodUrl, txid);
+    if (algodTx) return algodTx;
+
+    const indexerTx = await fetchTransactionFromIndexer(indexerUrl, txid);
+    if (indexerTx) return indexerTx;
+  }
+
+  return null;
+}
+
+async function fetchTransactionFromAlgod(
+  algodUrl: string,
+  txid: string,
+): Promise<IndexerTransaction | null> {
+  try {
+    const response = await fetch(`${algodUrl}/v2/transactions/pending/${txid}`);
+    if (!response.ok) return null;
+
+    const data = (await response.json()) as {
+      "confirmed-round"?: number;
+      "pool-error"?: string;
+      txn?: {
+        txn: {
+          type: string;
+          amt?: number;
+          rcv?: string;
+          snd?: string;
+          xaid?: number;
+          aamt?: number;
+          arcv?: string;
+          close?: string;
+          aclose?: string;
+          rekey?: string;
+          lx?: string;
+        };
+      };
+    };
+
+    if (!data["confirmed-round"] || data["confirmed-round"] <= 0) return null;
+    if (!data.txn?.txn) return null;
+
+    const raw = data.txn.txn;
+    // Convert algod pending format to indexer-like format.
+    const tx: IndexerTransaction = {
+      id: txid,
+      sender: raw.snd ?? "",
+      "tx-type": raw.type === "pay" ? "pay" : raw.type === "axfer" ? "axfer" : raw.type,
+      "confirmed-round": data["confirmed-round"],
+      ...(raw.lx ? { lease: raw.lx } : {}),
+      ...(raw.rekey ? { "rekey-to": raw.rekey } : {}),
+    };
+
+    if (raw.type === "pay") {
+      tx["payment-transaction"] = {
+        amount: raw.amt ?? 0,
+        receiver: raw.rcv ?? "",
+        ...(raw.close ? { "close-remainder-to": raw.close } : {}),
+      };
+    } else if (raw.type === "axfer") {
+      tx["asset-transfer-transaction"] = {
+        amount: raw.aamt ?? 0,
+        "asset-id": raw.xaid ?? 0,
+        receiver: raw.arcv ?? "",
+        ...(raw.aclose ? { "close-to": raw.aclose } : {}),
+      };
+    }
+
+    return tx;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchTransactionFromIndexer(
   indexerUrl: string,
   txid: string,
 ): Promise<IndexerTransaction | null> {
-  const response = await fetch(`${indexerUrl}/v2/transactions/${txid}`);
-  if (!response.ok) return null;
+  try {
+    const response = await fetch(`${indexerUrl}/v2/transactions/${txid}`);
+    if (!response.ok) return null;
 
-  const data = (await response.json()) as {
-    transaction?: IndexerTransaction;
-  };
+    const data = (await response.json()) as {
+      transaction?: IndexerTransaction;
+    };
 
-  return data.transaction ?? null;
+    return data.transaction ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // ── Helpers ──
@@ -802,17 +890,18 @@ type ChallengeRequest = {
   currency: string;
   methodDetails: {
     asaId?: string;
+    challengeReference: string;
     decimals?: number;
     feePayer?: boolean;
     feePayerKey?: string;
+    lease?: string;
     network?: string;
-    reference: string;
-    splits?: Array<{ amount: string; memo?: string; recipient: string }>;
     suggestedParams?: {
       firstValid: number;
       genesisHash: string;
       genesisId: string;
       lastValid: number;
+      minFee: number;
     };
   };
   recipient: string;
@@ -827,6 +916,7 @@ type IndexerTransaction = {
   };
   "confirmed-round"?: number;
   id: string;
+  lease?: string;
   "payment-transaction"?: {
     amount: number;
     "close-remainder-to"?: string;
@@ -860,15 +950,6 @@ export declare namespace charge {
     signer?: TransactionSigner;
     /** The Algorand address corresponding to the signer. Required when signer is provided. */
     signerAddress?: string;
-    /** Additional payment splits. Same asset as primary payment. Max 7 entries. */
-    splits?: Array<{
-      /** Amount in base units (same asset as primary). */
-      amount: string;
-      /** Optional memo (max 1024 bytes). */
-      memo?: string;
-      /** Algorand address of the split recipient. */
-      recipient: string;
-    }>;
     /**
      * Pluggable key-value store for consumed-TxID tracking (replay prevention).
      * Defaults to in-memory. Use a persistent store in production.

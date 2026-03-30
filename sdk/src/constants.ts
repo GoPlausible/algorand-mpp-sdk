@@ -45,5 +45,10 @@ export const USDT_MAINNET = 312769n;
 /** Well-known ASA IDs on Algorand TestNet */
 export const USDC_TESTNET = 10458941n;
 
-/** Minimum transaction fee in microalgos */
-export const MIN_TXN_FEE = 1000n;
+/**
+ * Default minimum transaction fee in microalgos.
+ * Used ONLY as a fallback when the network's `v2/transactions/params`
+ * response is unavailable. Implementations MUST prefer the dynamic
+ * `minFee` from network params or `suggestedParams.minFee`.
+ */
+export const DEFAULT_MIN_FEE = 1000n;

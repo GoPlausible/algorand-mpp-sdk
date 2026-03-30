@@ -40,7 +40,12 @@ export const charge = Method.from({
     request: z.object({
       /** Amount in base units (microalgos for ALGO, smallest unit for ASAs). */
       amount: z.string(),
-      /** Identifies the unit for amount. "ALGO" for native, or token symbol/ASA ID (e.g. "USDC"). */
+      /**
+       * Display label identifying the unit for amount. "ALGO" for native.
+       * For ASAs this is INFORMATIONAL ONLY — the canonical asset identity is
+       * `asaId` in `methodDetails`. ASA names are NOT unique on Algorand;
+       * clients MUST NOT rely on `currency` to identify the asset.
+       */
       currency: z.string(),
       /** Human-readable memo describing the resource or service being paid for. */
       description: z.optional(z.string()),
@@ -55,23 +60,18 @@ export const charge = Method.from({
         feePayer: z.optional(z.boolean()),
         /** Server's Algorand address for fee payment. Present when feePayer is true. */
         feePayerKey: z.optional(z.string()),
+        /**
+         * Base64-encoded 32-byte lease value for the payment transaction's `lx` field.
+         * Provides protocol-level idempotency bound to this challenge.
+         */
+        lease: z.optional(z.string()),
         /** CAIP-2 network identifier (algorand:<genesis-hash>). Defaults to MainNet. */
         network: z.optional(z.string()),
-        /** Server-generated unique identifier for this charge. */
-        reference: z.string(),
-        /** Additional payment splits (max 7). Same asset as primary payment. */
-        splits: z.optional(
-          z.array(
-            z.object({
-              /** Amount in base units (same asset as primary). */
-              amount: z.string(),
-              /** Optional memo for this split (max 1024 bytes). */
-              memo: z.optional(z.string()),
-              /** Algorand address of the split recipient. */
-              recipient: z.string(),
-            }),
-          ),
-        ),
+        /**
+         * Server-generated unique identifier for this payment challenge.
+         * Distinct from the receipt `reference` which is the on-chain TxID.
+         */
+        challengeReference: z.string(),
         /** Suggested transaction parameters from the server. */
         suggestedParams: z.optional(
           z.object({
@@ -83,6 +83,8 @@ export const charge = Method.from({
             genesisId: z.string(),
             /** Last valid round. */
             lastValid: z.number(),
+            /** Current network minimum fee per transaction in microalgos. */
+            minFee: z.number(),
           }),
         ),
       }),

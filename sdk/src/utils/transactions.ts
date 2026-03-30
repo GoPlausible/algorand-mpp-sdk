@@ -14,7 +14,7 @@ import {
 import {
   ALGORAND_MAINNET,
   DEFAULT_ALGOD_URLS,
-  MIN_TXN_FEE,
+  DEFAULT_MIN_FEE,
 } from "../constants.js";
 
 const textEncoder = new TextEncoder();
@@ -25,13 +25,8 @@ export type SuggestedTransactionParams = {
   genesisHash: Uint8Array;
   genesisId: string;
   lastValid: bigint;
-};
-
-/** A split payment entry. */
-export type Split = {
-  amount: string;
-  memo?: string;
-  recipient: string;
+  /** Current network minimum fee per transaction in microalgos. */
+  minFee: bigint;
 };
 
 /**
@@ -41,12 +36,13 @@ export function buildPaymentTransaction(params: {
   amount: bigint;
   asaId?: bigint;
   fee?: bigint;
+  lease?: Uint8Array;
   note?: Uint8Array;
   receiver: string;
   sender: string;
   suggestedParams: SuggestedTransactionParams;
 }): Transaction {
-  const { sender, receiver, amount, asaId, fee, note, suggestedParams } =
+  const { sender, receiver, amount, asaId, fee, lease, note, suggestedParams } =
     params;
 
   if (asaId !== undefined) {
@@ -59,6 +55,7 @@ export function buildPaymentTransaction(params: {
       lastValid: suggestedParams.lastValid,
       genesisHash: suggestedParams.genesisHash,
       genesisId: suggestedParams.genesisId,
+      lease,
       note,
       assetTransfer: {
         assetId: asaId,
@@ -77,6 +74,7 @@ export function buildPaymentTransaction(params: {
     lastValid: suggestedParams.lastValid,
     genesisHash: suggestedParams.genesisHash,
     genesisId: suggestedParams.genesisId,
+    lease,
     note,
     payment: {
       receiver: Address.fromString(receiver),
@@ -94,7 +92,7 @@ export function buildFeePayerTransaction(params: {
   suggestedParams: SuggestedTransactionParams;
 }): Transaction {
   const { feePayerKey, groupSize, suggestedParams } = params;
-  const totalFee = BigInt(groupSize) * MIN_TXN_FEE;
+  const totalFee = BigInt(groupSize) * suggestedParams.minFee;
   return new Transaction({
     type: TransactionType.Payment,
     sender: Address.fromString(feePayerKey),
@@ -112,16 +110,18 @@ export function buildFeePayerTransaction(params: {
 
 /**
  * Build a complete payment group for a charge challenge.
+ *
+ * Transaction group structure: [optional fee payer] + [payment].
  */
 export function buildChargeGroup(params: {
   amount: bigint;
   asaId?: bigint;
+  challengeReference: string;
   externalId?: string;
   feePayerKey?: string;
+  lease?: Uint8Array;
   receiver: string;
-  reference: string;
   sender: string;
-  splits?: Split[];
   suggestedParams: SuggestedTransactionParams;
   useServerFeePayer: boolean;
 }): { paymentIndex: number; transactions: Transaction[] } {
@@ -130,38 +130,26 @@ export function buildChargeGroup(params: {
     receiver,
     amount,
     asaId,
-    reference,
+    challengeReference,
     externalId,
-    splits,
+    lease,
     useServerFeePayer,
     feePayerKey,
     suggestedParams,
   } = params;
 
-  // Validate split count per spec (max 7).
-  if (splits && splits.length > 7) {
-    throw new Error("splits cannot exceed 7 entries");
-  }
-
   const transactions: Transaction[] = [];
 
-  // Compute primary amount (total minus splits).
-  const splitsTotal = (splits ?? []).reduce(
-    (sum, s) => sum + BigInt(s.amount),
-    0n,
-  );
-  const primaryAmount = amount - splitsTotal;
-
-  // Build note with reference and optional externalId.
+  // Build note with challengeReference and optional externalId.
   const noteStr = externalId
-    ? `mppx:${reference}:${externalId}`
-    : `mppx:${reference}`;
+    ? `mppx:${challengeReference}:${externalId}`
+    : `mppx:${challengeReference}`;
   const note = textEncoder.encode(noteStr);
 
   // Fee payer transaction (index 0 when present).
+  // Fee payer MUST NOT have a lease set (per spec).
   if (useServerFeePayer && feePayerKey) {
-    // The group size is: 1 (fee payer) + 1 (primary) + splits count
-    const groupSize = 1 + 1 + (splits?.length ?? 0);
+    const groupSize = 2; // fee payer + payment
     transactions.push(
       buildFeePayerTransaction({ feePayerKey, groupSize, suggestedParams }),
     );
@@ -169,35 +157,20 @@ export function buildChargeGroup(params: {
 
   // Primary payment transaction.
   const paymentIndex = transactions.length;
-  const clientFee = useServerFeePayer ? 0n : MIN_TXN_FEE;
+  const clientFee = useServerFeePayer ? 0n : suggestedParams.minFee;
 
   transactions.push(
     buildPaymentTransaction({
       sender,
       receiver,
-      amount: primaryAmount,
+      amount,
       asaId,
       fee: clientFee,
+      lease,
       note,
       suggestedParams,
     }),
   );
-
-  // Split payment transactions.
-  for (const split of splits ?? []) {
-    const splitNote = split.memo ? textEncoder.encode(split.memo) : undefined;
-    transactions.push(
-      buildPaymentTransaction({
-        sender,
-        receiver: split.recipient,
-        amount: BigInt(split.amount),
-        asaId,
-        fee: useServerFeePayer ? 0n : MIN_TXN_FEE,
-        note: splitNote,
-        suggestedParams,
-      }),
-    );
-  }
 
   // Assign group ID.
   const grouped = groupTransactions(transactions);
@@ -329,6 +302,7 @@ export async function resolveSuggestedParams(
         genesisHash: string;
         genesisId: string;
         lastValid: number;
+        minFee: number;
       }
     | undefined,
   network: string | undefined,
@@ -340,6 +314,7 @@ export async function resolveSuggestedParams(
       lastValid: BigInt(serverParams.lastValid),
       genesisHash: base64ToUint8Array(serverParams.genesisHash),
       genesisId: serverParams.genesisId,
+      minFee: BigInt(serverParams.minFee),
     };
   }
 
@@ -361,6 +336,7 @@ export async function resolveSuggestedParams(
     lastValid: BigInt(data["last-round"] + 1000),
     genesisHash: base64ToUint8Array(data["genesis-hash"]),
     genesisId: data["genesis-id"],
+    minFee: BigInt(data["min-fee"] || Number(DEFAULT_MIN_FEE)),
   };
 }
 

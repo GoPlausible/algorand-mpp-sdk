@@ -31,11 +31,6 @@ const PRODUCTS: Record<
   },
 }
 
-// Platform fee: 5% of product price
-const PLATFORM_FEE_BPS = 500 // 5% in basis points
-// Referral commission: 2%
-const REFERRAL_FEE_BPS = 200
-
 export function registerMarketplace(
   app: Express,
   platformAddress: string,
@@ -55,44 +50,11 @@ export function registerMarketplace(
     res.json(list)
   })
 
-  // Purchase with splits — demonstrates atomic payment splits
+  // Purchase — USDC payment to platform
   app.get('/api/v1/marketplace/buy/:productId', async (req, res) => {
     const product = PRODUCTS[req.params.productId]
     if (!product) {
       return res.status(404).json({ error: 'Product not found' })
-    }
-
-    const referrer = req.query.referrer as string | undefined
-
-    // Validate referrer is opted in to USDC before including in splits
-    if (referrer) {
-      try {
-        const acctRes = await fetch(`${TESTNET_ALGOD_URL}/v2/accounts/${referrer}`)
-        const acctData = (await acctRes.json()) as { assets?: Array<{ 'asset-id': number }> }
-        const hasUsdc = acctData.assets?.some((a) => a['asset-id'] === Number(USDC_ASA_ID))
-        if (!hasUsdc) {
-          return res.status(400).json({
-            error: 'Referrer not opted in to USDC',
-            detail: `Account ${referrer} must opt in to ASA ${USDC_ASA_ID} (TestNet USDC) before receiving referral payments.`,
-            faucet: 'https://faucet.circle.com/',
-          })
-        }
-      } catch {
-        return res.status(400).json({ error: 'Could not verify referrer account' })
-      }
-    }
-
-    // Compute splits
-    const platformFee = Math.floor((product.price * PLATFORM_FEE_BPS) / 10_000)
-    const referralFee = referrer ? Math.floor((product.price * REFERRAL_FEE_BPS) / 10_000) : 0
-    const totalAmount = product.price + platformFee + referralFee
-
-    const splits: Array<{ recipient: string; amount: string; memo?: string }> = [
-      { recipient: platformAddress, amount: String(platformFee), memo: 'platform fee (5%)' },
-    ]
-
-    if (referrer) {
-      splits.push({ recipient: referrer, amount: String(referralFee), memo: 'referral (2%)' })
     }
 
     const mppx = Mppx.create({
@@ -105,7 +67,6 @@ export function registerMarketplace(
           indexerUrl: TESTNET_INDEXER_URL,
           asaId: USDC_ASA_ID,
           decimals: USDC_DECIMALS,
-          splits,
           ...(feePayerSigner && feePayerAddress ? {
             signer: feePayerSigner,
             signerAddress: feePayerAddress,
@@ -115,7 +76,7 @@ export function registerMarketplace(
     })
 
     const result = await mppx.charge({
-      amount: String(totalAmount),
+      amount: String(product.price),
       currency: 'USDC',
       description: `Purchase: ${product.name}`,
     })(toWebRequest(req))
@@ -130,12 +91,7 @@ export function registerMarketplace(
     const response = result.withReceipt(
       Response.json({
         product: product.name,
-        breakdown: {
-          seller: `${(product.price / 1_000_000).toFixed(2)} USDC`,
-          platformFee: `${(platformFee / 1_000_000).toFixed(2)} USDC`,
-          ...(referrer ? { referralFee: `${(referralFee / 1_000_000).toFixed(2)} USDC` } : {}),
-          total: `${(totalAmount / 1_000_000).toFixed(2)} USDC`,
-        },
+        price: `${(product.price / 1_000_000).toFixed(2)} USDC`,
         status: 'purchased',
       }),
     ) as Response
