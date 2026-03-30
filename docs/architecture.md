@@ -123,8 +123,7 @@ mppx.fetch(url)
   │   ├── Resolve suggested params (from challenge or algod)
   │   ├── Build transaction group
   │   │   ├── Fee payer txn (if server sponsors fees)
-  │   │   ├── Primary payment txn (ALGO or ASA)
-  │   │   └── Split txns (platform fee, referral, etc.)
+  │   │   └── Payment txn (ALGO or ASA)
   │   ├── Assign group ID
   │   ├── Encode transactions to raw bytes
   │   ├── Sign via signer (use-wallet / custom)

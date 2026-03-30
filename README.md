@@ -110,7 +110,7 @@ const response = await mppx.fetch('https://api.example.com/api/data')
 const data = await response.json()
 ```
 
-### Server with Fee Sponsorship + USDC + Splits
+### Server with Fee Sponsorship + USDC
 
 ```ts
 algorand.charge({

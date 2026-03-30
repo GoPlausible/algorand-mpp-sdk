@@ -96,31 +96,6 @@ Products: `algo-hoodie` (0.17 USDC), `validator-mug` (0.15 USDC), `nft-sticker-p
 
 Each purchase is a single USDC payment to the platform address.
 
-> **Note:** In the demo, the platform address and seller address are both set to `RECIPIENT`. In production, each would be a distinct address.
-
-#### Referral Program
-
-The referral system allows third parties to earn a commission by driving purchases. When a referrer's Algorand address is included in the purchase URL, 2% of the product price is automatically routed to their account as part of the atomic payment group.
-
-**How it works:**
-
-1. A referrer shares a purchase link with their address: `https://example.com/api/v1/marketplace/buy/algo-hoodie?referrer=THEIR_ALGO_ADDRESS`
-2. When a buyer uses that link, the server includes a referral split in the 402 challenge
-3. The client builds an atomic group with an additional ASA transfer to the referrer
-4. On confirmation, the referrer receives their 2% commission in the same transaction group
-
-**Integration example:**
-
-```bash
-# Without referral — 2 transactions (seller + platform)
-curl http://localhost:3000/api/v1/marketplace/buy/algo-hoodie
-
-# With referral — 3 transactions (seller + platform + referrer)
-curl "http://localhost:3000/api/v1/marketplace/buy/algo-hoodie?referrer=REFERRER_ALGO_ADDRESS"
-```
-
-The referral fee is additive — it increases the total cost to the buyer rather than reducing the seller's or platform's share. This ensures sellers and the platform receive their full amounts regardless of whether a referral is involved.
-
 ### Health Check
 
 ```bash
