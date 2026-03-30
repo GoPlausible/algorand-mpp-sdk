@@ -9,6 +9,15 @@ import {
   DEFAULT_INDEXER_URLS,
 } from "../constants.js";
 
+const defaultParams = {
+  fee: 0n,
+  firstValid: 100n,
+  lastValid: 1100n,
+  genesisHash: new Uint8Array(32),
+  genesisId: "testnet-v1.0",
+  minFee: 1000n,
+};
+
 describe("charge method schema", () => {
   it("has the correct intent and name", () => {
     expect(charge.intent).toBe("charge");
@@ -38,6 +47,26 @@ describe("constants", () => {
   });
 });
 
+describe("computeRequiredFee", () => {
+  it("returns minFee when feePerByte is 0 (normal conditions)", async () => {
+    const { computeRequiredFee } = await import("../utils/transactions.js");
+    // max(0 * 200, 1000) = 1000
+    expect(computeRequiredFee(0n, 200n, 1000n)).toBe(1000n);
+  });
+
+  it("returns size-based fee when it exceeds minFee (congestion)", async () => {
+    const { computeRequiredFee } = await import("../utils/transactions.js");
+    // max(10 * 200, 1000) = 2000
+    expect(computeRequiredFee(10n, 200n, 1000n)).toBe(2000n);
+  });
+
+  it("returns minFee when size-based fee equals minFee", async () => {
+    const { computeRequiredFee } = await import("../utils/transactions.js");
+    // max(5 * 200, 1000) = 1000
+    expect(computeRequiredFee(5n, 200n, 1000n)).toBe(1000n);
+  });
+});
+
 describe("transaction utilities", () => {
   it("builds a native ALGO payment transaction", async () => {
     const { buildPaymentTransaction } =
@@ -53,13 +82,7 @@ describe("transaction utilities", () => {
       sender,
       receiver,
       amount: 1_000_000n,
-      suggestedParams: {
-        firstValid: 100n,
-        lastValid: 1100n,
-        genesisHash: new Uint8Array(32),
-        genesisId: "testnet-v1.0",
-        minFee: 1000n,
-      },
+      suggestedParams: defaultParams,
     });
 
     expect(txn.type).toBe(TransactionType.Payment);
@@ -83,13 +106,7 @@ describe("transaction utilities", () => {
       receiver,
       amount: 1_000_000n,
       asaId: 31566704n,
-      suggestedParams: {
-        firstValid: 100n,
-        lastValid: 1100n,
-        genesisHash: new Uint8Array(32),
-        genesisId: "testnet-v1.0",
-        minFee: 1000n,
-      },
+      suggestedParams: defaultParams,
     });
 
     expect(txn.type).toBe(TransactionType.AssetTransfer);
@@ -97,7 +114,7 @@ describe("transaction utilities", () => {
     expect(txn.assetTransfer?.assetId).toBe(31566704n);
   });
 
-  it("builds a fee payer transaction with dynamic minFee", async () => {
+  it("builds a fee payer transaction with explicit pooled fee", async () => {
     const { buildFeePayerTransaction } =
       await import("../utils/transactions.js");
     const { TransactionType } =
@@ -108,47 +125,20 @@ describe("transaction utilities", () => {
 
     const txn = buildFeePayerTransaction({
       feePayerKey,
-      groupSize: 2,
-      suggestedParams: {
-        firstValid: 100n,
-        lastValid: 1100n,
-        genesisHash: new Uint8Array(32),
-        genesisId: "testnet-v1.0",
-        minFee: 1000n,
-      },
+      pooledFee: 2000n,
+      suggestedParams: defaultParams,
     });
 
     expect(txn.type).toBe(TransactionType.Payment);
     expect(txn.payment?.amount).toBe(0n);
-    // Fee should cover 2 transactions: 2 * 1000 = 2000
     expect(txn.fee).toBe(2000n);
   });
 
-  it("fee payer uses dynamic minFee (not hardcoded)", async () => {
-    const { buildFeePayerTransaction } =
+  it("charge group fee payer covers pooled fees using formula", async () => {
+    const { buildChargeGroup, computeRequiredFee } =
       await import("../utils/transactions.js");
-
-    const feePayerKey =
-      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ";
-
-    const txn = buildFeePayerTransaction({
-      feePayerKey,
-      groupSize: 2,
-      suggestedParams: {
-        firstValid: 100n,
-        lastValid: 1100n,
-        genesisHash: new Uint8Array(32),
-        genesisId: "testnet-v1.0",
-        minFee: 2000n, // Higher minFee (congestion)
-      },
-    });
-
-    // Fee should be 2 * 2000 = 4000
-    expect(txn.fee).toBe(4000n);
-  });
-
-  it("builds a charge group with fee payer", async () => {
-    const { buildChargeGroup } = await import("../utils/transactions.js");
+    const { encodeTransactionRaw } =
+      await import("@algorandfoundation/algokit-utils/transact");
 
     const sender = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ";
     const receiver =
@@ -163,20 +153,93 @@ describe("transaction utilities", () => {
       challengeReference: "test-ref-456",
       useServerFeePayer: true,
       feePayerKey,
-      suggestedParams: {
-        firstValid: 100n,
-        lastValid: 1100n,
-        genesisHash: new Uint8Array(32),
-        genesisId: "testnet-v1.0",
-        minFee: 1000n,
-      },
+      suggestedParams: defaultParams,
     });
 
-    // Fee payer at index 0, payment at index 1.
     expect(paymentIndex).toBe(1);
     expect(transactions.length).toBe(2);
-    expect(transactions[0].payment?.amount).toBe(0n); // Fee payer: zero amount.
-    expect(transactions[1].payment?.amount).toBe(1_000_000n); // Primary payment.
+
+    // Fee payer (idx 0) carries pooled fee; payment (idx 1) has fee=0.
+    expect(transactions[1].fee).toBe(0n);
+    const feePayerFee = transactions[0].fee!;
+
+    // Verify the pooled fee covers both txns using the spec formula.
+    let expectedPooled = 0n;
+    for (const txn of transactions) {
+      const size = BigInt(encodeTransactionRaw(txn).length);
+      expectedPooled += computeRequiredFee(
+        defaultParams.fee,
+        size,
+        defaultParams.minFee,
+      );
+    }
+    expect(feePayerFee).toBe(expectedPooled);
+    // Under normal conditions (fee=0), this is >= N * minFee
+    expect(feePayerFee).toBeGreaterThanOrEqual(2n * defaultParams.minFee);
+  });
+
+  it("client-paid fee uses formula (not just minFee)", async () => {
+    const { buildChargeGroup, computeRequiredFee } =
+      await import("../utils/transactions.js");
+    const { encodeTransactionRaw } =
+      await import("@algorandfoundation/algokit-utils/transact");
+
+    const sender = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ";
+    const receiver =
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ";
+
+    const { transactions, paymentIndex } = buildChargeGroup({
+      sender,
+      receiver,
+      amount: 1_000_000n,
+      challengeReference: "test-ref-client-fee",
+      useServerFeePayer: false,
+      suggestedParams: defaultParams,
+    });
+
+    expect(transactions.length).toBe(1);
+    const txn = transactions[paymentIndex];
+    const size = BigInt(encodeTransactionRaw(txn).length);
+    const expectedFee = computeRequiredFee(
+      defaultParams.fee,
+      size,
+      defaultParams.minFee,
+    );
+    expect(txn.fee).toBe(expectedFee);
+  });
+
+  it("congestion fee (feePerByte > 0) produces higher fees", async () => {
+    const { buildChargeGroup, computeRequiredFee } =
+      await import("../utils/transactions.js");
+    const { encodeTransactionRaw } =
+      await import("@algorandfoundation/algokit-utils/transact");
+
+    const sender = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ";
+    const receiver =
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ";
+
+    const congestedParams = { ...defaultParams, fee: 100n }; // 100 microalgos per byte (heavy congestion)
+
+    const { transactions: normalTxns } = buildChargeGroup({
+      sender,
+      receiver,
+      amount: 1_000_000n,
+      challengeReference: "test-normal",
+      useServerFeePayer: false,
+      suggestedParams: defaultParams,
+    });
+
+    const { transactions: congestedTxns } = buildChargeGroup({
+      sender,
+      receiver,
+      amount: 1_000_000n,
+      challengeReference: "test-congested",
+      useServerFeePayer: false,
+      suggestedParams: congestedParams,
+    });
+
+    // Congested fee should be higher than normal fee
+    expect(congestedTxns[0].fee!).toBeGreaterThan(normalTxns[0].fee!);
   });
 
   it("builds a charge group with lease", async () => {
@@ -196,13 +259,7 @@ describe("transaction utilities", () => {
       challengeReference: "test-ref-lease",
       lease,
       useServerFeePayer: false,
-      suggestedParams: {
-        firstValid: 100n,
-        lastValid: 1100n,
-        genesisHash: new Uint8Array(32),
-        genesisId: "testnet-v1.0",
-        minFee: 1000n,
-      },
+      suggestedParams: defaultParams,
     });
 
     expect(paymentIndex).toBe(0);
@@ -224,13 +281,7 @@ describe("transaction utilities", () => {
       amount: 1_000_000n,
       challengeReference: "my-challenge-ref",
       useServerFeePayer: false,
-      suggestedParams: {
-        firstValid: 100n,
-        lastValid: 1100n,
-        genesisHash: new Uint8Array(32),
-        genesisId: "testnet-v1.0",
-        minFee: 1000n,
-      },
+      suggestedParams: defaultParams,
     });
 
     const note = new TextDecoder().decode(transactions[paymentIndex].note);

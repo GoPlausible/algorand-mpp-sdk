@@ -133,11 +133,11 @@ clients construct a group of transactions that execute atomically
 (all succeed or all fail). This enables fee sponsorship and
 complex payment flows without requiring smart contracts.
 
-## Pull Mode (Default) {#pull-mode}
+## Server-Broadcast Mode (Default) {#server-broadcast-mode}
 
-The default flow, called "pull mode", uses `type="transaction"`
-credentials. The client signs the transaction group and the server
-"pulls" it for broadcast to the Algorand network:
+The default flow uses `type="transaction"` credentials. The
+client signs the transaction group and the server broadcasts
+it to the Algorand network:
 
 ~~~
    Client                     Server              Algorand Network
@@ -176,11 +176,11 @@ is `true`, the challenge includes `feePayerKey` so the client
 includes a fee payer transaction in the group. The server co-signs
 the fee payer transaction before broadcasting.
 
-## Push Mode (Fallback) {#push-mode}
+## Client-Broadcast Mode (Fallback) {#client-broadcast-mode}
 
-The fallback flow, called "push mode", uses `type="txid"`
-credentials. The client "pushes" the transaction group to the
-network itself and presents the confirmed transaction identifier:
+The fallback flow uses `type="txid"` credentials. The client
+broadcasts the transaction group to the network itself and
+presents the confirmed transaction identifier:
 
 ~~~
    Client                     Server              Algorand Network
@@ -281,18 +281,17 @@ Asset Opt-In
   receiving a particular ASA. An asset transfer to an account
   that has not opted in to the asset will be rejected.
 
-Pull Mode
+Server-Broadcast Mode
 : The default settlement flow where the client signs the
   transaction group and the server broadcasts it
-  (`type="transaction"`). The server "pulls" the signed group
-  from the credential. Enables fee sponsorship and server-side
-  simulation.
+  (`type="transaction"`). Enables fee sponsorship and
+  server-side simulation.
 
-Push Mode
-: The fallback settlement flow where the client broadcasts the
-  transaction group itself and presents the confirmed transaction
-  identifier (`type="txid"`). The client "pushes" the group to
-  the network directly.
+Client-Broadcast Mode
+: The fallback settlement flow where the client broadcasts
+  the transaction group itself and presents the confirmed
+  transaction identifier (`type="txid"`). The client
+  submits the group to the network directly.
 
 CAIP-2
 : Chain Agnostic Improvement Proposal 2, a standard for
@@ -619,9 +618,9 @@ payload
   additional fields are present. Two payload types are
   defined: `"transaction"` (default) and `"txid"` (fallback).
 
-## Transaction Payload -- Pull Mode {#transaction-payload}
+## Transaction Payload -- Server-Broadcast Mode {#transaction-payload}
 
-In pull mode (`type="transaction"`), the client sends the
+In server-broadcast mode (`type="transaction"`), the client sends the
 signed transaction group to the server for broadcast. The
 payload contains the group as an array of base64-encoded
 msgpack-serialized transactions.
@@ -666,9 +665,9 @@ Example (decoded):
 }
 ~~~
 
-## TxID Payload -- Push Mode {#txid-payload}
+## TxID Payload -- Client-Broadcast Mode {#txid-payload}
 
-In push mode (`type="txid"`), the client has already broadcast
+In client-broadcast mode (`type="txid"`), the client has already broadcast
 the transaction group to the Algorand network. The `txid` field
 contains the transaction identifier of the payment transaction
 (i.e., the transaction at `paymentIndex` in the group) for the
@@ -699,7 +698,7 @@ HA5XNBQQHW7MWA"
 }
 ~~~
 
-## Limitations of Push Mode {#txid-limitations}
+## Limitations of Client-Broadcast Mode {#txid-limitations}
 
 The `type="txid"` credential has the following limitations:
 
@@ -860,7 +859,7 @@ Upon receiving a request with a credential, the server MUST:
    - For `type="transaction"`: see {{transaction-verification}}.
    - For `type="txid"`: see {{txid-verification}}.
 
-## Pull Mode Verification {#transaction-verification}
+## Server-Broadcast Mode Verification {#transaction-verification}
 
 For credentials with `type="transaction"`:
 
@@ -951,7 +950,7 @@ servers MUST check:
 
 8. The transaction is unsigned (the server will sign it).
 
-## Push Mode Verification {#txid-verification}
+## Client-Broadcast Mode Verification {#txid-verification}
 
 For credentials with `type="txid"`:
 
@@ -1066,7 +1065,8 @@ following states:
    challenge; concurrent submissions for the same
    challenge MUST be serialized.
 3. **broadcast**: The transaction group has been
-   submitted to the Algorand network (pull mode only).
+   submitted to the Algorand network (server-broadcast
+   mode only).
 4. **confirmed**: The transaction is confirmed in a
    block with instant finality.
 5. **fulfilled**: The resource has been served and the
@@ -1085,7 +1085,7 @@ on retry (idempotent success).
 Two settlement flows are supported, corresponding to
 the two credential types.
 
-## Pull Mode Settlement (type="transaction")
+## Server-Broadcast Settlement (type="transaction")
 
 For `type="transaction"` credentials, the client signs the
 transaction group and sends it to the server. The server
@@ -1130,7 +1130,7 @@ optionally adds a fee payer signature and broadcasts:
 6. Server records the TxID as consumed and returns the
    resource with a Payment-Receipt header.
 
-## Push Mode Settlement (type="txid")
+## Client-Broadcast Settlement (type="txid")
 
 For `type="txid"` credentials, the client broadcasts the
 transaction group itself and presents the confirmed TxID:
@@ -1448,9 +1448,9 @@ transaction data, causing the server to accept payments
 that were never made. Servers SHOULD use trusted node
 providers or run their own nodes.
 
-## Front-running (Push Mode)
+## Front-running (Client-Broadcast Mode)
 
-In push mode, the client broadcasts the transaction group
+In client-broadcast mode, the client broadcasts the transaction group
 before presenting the credential, making it visible
 on-chain. A party monitoring the chain could attempt to
 present the same TxID to the server. The challenge
@@ -1459,7 +1459,7 @@ is verified by the server) and single-use TxID
 enforcement mitigate this: only the party that received
 the challenge can construct a valid credential.
 
-Pull mode is not susceptible to front-running because
+Server-broadcast mode is not susceptible to front-running because
 the transaction is not broadcast until the server
 receives and validates the credential.
 
@@ -1477,8 +1477,8 @@ Denial of Service via Bad Transactions
 
   - **Transaction simulation**: The `simulate` endpoint
     catches most failures before broadcast, without
-    spending fees. Servers SHOULD simulate all pull mode
-    groups before broadcasting.
+    spending fees. Servers SHOULD simulate all
+    server-broadcast mode groups before broadcasting.
   - **Rate limiting**: per client address, per IP, or
     per time window.
   - **Balance verification**: check the client's balance
@@ -1514,7 +1514,7 @@ not opted in.
 
 ## Transaction Group Security
 
-In pull mode, the server receives a complete transaction
+In server-broadcast mode, the server receives a complete transaction
 group from the client. A malicious client could include
 unexpected transactions in the group. Servers MUST verify
 that the group contains only expected transactions:
@@ -1531,7 +1531,7 @@ provides `suggestedParams` in the challenge, clients
 SHOULD verify the round range is plausible. A malicious
 server could provide an expired round range, causing the
 client to sign a transaction that will never be accepted.
-In pull mode, the practical risk is limited to a failed
+In server-broadcast mode, the practical risk is limited to a failed
 payment attempt that the client can retry.
 
 ## Rekeyed Account Authorization {#rekeyed-accounts}
@@ -1606,7 +1606,7 @@ The following examples illustrate the complete HTTP exchange
 for each flow. Base64url values are shown with their decoded
 JSON below.
 
-## Native ALGO Charge (Pull Mode)
+## Native ALGO Charge (Server-Broadcast Mode)
 
 A 10 ALGO charge for weather API access.
 
@@ -1816,7 +1816,7 @@ Algorand's fee pooling. The payment transaction at
 index 1 has `fee: 0` (omitted in msgpack) and includes
 the `lx` (lease) field binding it to the challenge.
 
-## Push Mode (type="txid")
+## Client-Broadcast Mode (type="txid")
 
 The client broadcasts the transaction group itself and
 presents the confirmed TxID. Cannot be used with fee

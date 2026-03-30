@@ -202,6 +202,9 @@ describe("Server: challenge issuance", () => {
     expect(requestData.methodDetails?.suggestedParams).toHaveProperty(
       "minFee",
     );
+    expect(requestData.methodDetails?.suggestedParams).toHaveProperty(
+      "fee",
+    );
   });
 
   it.skipIf(!hasKey)(
@@ -293,6 +296,7 @@ describe("Client: transaction building", () => {
         lastValid: 1100n,
         genesisHash: new Uint8Array(32),
         genesisId: "testnet-v1.0",
+        fee: 0n,
         minFee: 1000n,
       },
     });
@@ -325,6 +329,7 @@ describe("Client: transaction building", () => {
         lastValid: 1100n,
         genesisHash: new Uint8Array(32),
         genesisId: "testnet-v1.0",
+        fee: 0n,
         minFee: 1000n,
       },
     });
@@ -357,7 +362,8 @@ describe("Encoding: transaction roundtrip", () => {
           lastValid: 1100n,
           genesisHash: new Uint8Array(32),
           genesisId: "testnet-v1.0",
-          minFee: 1000n,
+          fee: 0n,
+        minFee: 1000n,
         },
       });
 
@@ -421,6 +427,7 @@ describe("End-to-end: full ALGO payment flow (TestNet)", () => {
         amount: string;
         methodDetails: {
           suggestedParams: {
+            fee: number;
             firstValid: number;
             lastValid: number;
             genesisHash: string;
@@ -450,6 +457,7 @@ describe("End-to-end: full ALGO payment flow (TestNet)", () => {
         useServerFeePayer: challengeRequest.methodDetails.feePayer,
         feePayerKey: challengeRequest.methodDetails.feePayerKey,
         suggestedParams: {
+          fee: BigInt(sp.fee),
           firstValid: BigInt(sp.firstValid),
           lastValid: BigInt(sp.lastValid),
           genesisHash: base64ToUint8Array(sp.genesisHash),

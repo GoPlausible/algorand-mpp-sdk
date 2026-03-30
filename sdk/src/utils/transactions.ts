@@ -21,13 +21,32 @@ const textEncoder = new TextEncoder();
 
 /** Suggested params for transaction construction. */
 export type SuggestedTransactionParams = {
+  /** Suggested fee per byte in microalgos. 0 under normal conditions; increases under congestion. */
+  fee: bigint;
   firstValid: bigint;
   genesisHash: Uint8Array;
   genesisId: string;
   lastValid: bigint;
-  /** Current network minimum fee per transaction in microalgos. */
+  /** Network minimum fee per transaction in microalgos. */
   minFee: bigint;
 };
+
+/**
+ * Compute the required fee for a transaction per the spec formula:
+ *   required_fee = max(fee_per_byte * txn_size_in_bytes, min_fee)
+ *
+ * @param feePerByte - Suggested fee per byte from v2/transactions/params (0 under normal conditions)
+ * @param txnSizeBytes - Serialized transaction size in bytes
+ * @param minFee - Network minimum fee per transaction
+ */
+export function computeRequiredFee(
+  feePerByte: bigint,
+  txnSizeBytes: bigint,
+  minFee: bigint,
+): bigint {
+  const sizeBased = feePerByte * txnSizeBytes;
+  return sizeBased > minFee ? sizeBased : minFee;
+}
 
 /**
  * Build a payment transaction (ALGO or ASA).
@@ -85,18 +104,21 @@ export function buildPaymentTransaction(params: {
 
 /**
  * Build a zero-amount fee payer transaction (pay to self).
+ *
+ * @param pooledFee - Total fee this transaction must carry to cover
+ *   the entire group via fee pooling. Computed by the caller using
+ *   `computeRequiredFee` for each transaction in the group.
  */
 export function buildFeePayerTransaction(params: {
   feePayerKey: string;
-  groupSize: number;
+  pooledFee: bigint;
   suggestedParams: SuggestedTransactionParams;
 }): Transaction {
-  const { feePayerKey, groupSize, suggestedParams } = params;
-  const totalFee = BigInt(groupSize) * suggestedParams.minFee;
+  const { feePayerKey, pooledFee, suggestedParams } = params;
   return new Transaction({
     type: TransactionType.Payment,
     sender: Address.fromString(feePayerKey),
-    fee: totalFee,
+    fee: pooledFee,
     firstValid: suggestedParams.firstValid,
     lastValid: suggestedParams.lastValid,
     genesisHash: suggestedParams.genesisHash,
@@ -112,6 +134,13 @@ export function buildFeePayerTransaction(params: {
  * Build a complete payment group for a charge challenge.
  *
  * Transaction group structure: [optional fee payer] + [payment].
+ *
+ * Fee calculation per spec:
+ *   required_fee = max(fee_per_byte * txn_size_in_bytes, min_fee)
+ *
+ * When fee payer is present, the fee payer transaction carries the
+ * pooled fee for the entire group; client transactions have fee=0.
+ * When client pays, each transaction carries its own required fee.
  */
 export function buildChargeGroup(params: {
   amount: bigint;
@@ -138,44 +167,77 @@ export function buildChargeGroup(params: {
     suggestedParams,
   } = params;
 
-  const transactions: Transaction[] = [];
-
   // Build note with challengeReference and optional externalId.
   const noteStr = externalId
     ? `mppx:${challengeReference}:${externalId}`
     : `mppx:${challengeReference}`;
   const note = textEncoder.encode(noteStr);
 
-  // Fee payer transaction (index 0 when present).
-  // Fee payer MUST NOT have a lease set (per spec).
-  if (useServerFeePayer && feePayerKey) {
-    const groupSize = 2; // fee payer + payment
-    transactions.push(
-      buildFeePayerTransaction({ feePayerKey, groupSize, suggestedParams }),
-    );
-  }
+  // Step 1: Build the payment transaction with a placeholder fee (0).
+  // We need its serialized size to compute the actual required fee.
+  const paymentTxn = buildPaymentTransaction({
+    sender,
+    receiver,
+    amount,
+    asaId,
+    fee: 0n,
+    lease,
+    note,
+    suggestedParams,
+  });
 
-  // Primary payment transaction.
-  const paymentIndex = transactions.length;
-  const clientFee = useServerFeePayer ? 0n : suggestedParams.minFee;
-
-  transactions.push(
-    buildPaymentTransaction({
-      sender,
-      receiver,
-      amount,
-      asaId,
-      fee: clientFee,
-      lease,
-      note,
-      suggestedParams,
-    }),
+  // Step 2: Compute the required fee for the payment transaction.
+  const paymentBytes = encodeTransactionRaw(paymentTxn);
+  const paymentRequiredFee = computeRequiredFee(
+    suggestedParams.fee,
+    BigInt(paymentBytes.length),
+    suggestedParams.minFee,
   );
 
-  // Assign group ID.
-  const grouped = groupTransactions(transactions);
+  if (useServerFeePayer && feePayerKey) {
+    // Fee payer mode: client pays 0, fee payer covers everything.
+    // Build a temporary fee payer to measure its size.
+    const tempFeePayer = buildFeePayerTransaction({
+      feePayerKey,
+      pooledFee: 0n,
+      suggestedParams,
+    });
+    const feePayerBytes = encodeTransactionRaw(tempFeePayer);
+    const feePayerRequiredFee = computeRequiredFee(
+      suggestedParams.fee,
+      BigInt(feePayerBytes.length),
+      suggestedParams.minFee,
+    );
 
-  return { paymentIndex, transactions: grouped };
+    // Pooled fee = sum of all required fees in the group.
+    const pooledFee = feePayerRequiredFee + paymentRequiredFee;
+
+    // Rebuild fee payer with the correct pooled fee.
+    const feePayerTxn = buildFeePayerTransaction({
+      feePayerKey,
+      pooledFee,
+      suggestedParams,
+    });
+
+    // Payment stays at fee=0.
+    const transactions = groupTransactions([feePayerTxn, paymentTxn]);
+    return { paymentIndex: 1, transactions };
+  }
+
+  // Client-paid: set the payment's fee to its required fee.
+  const paymentWithFee = buildPaymentTransaction({
+    sender,
+    receiver,
+    amount,
+    asaId,
+    fee: paymentRequiredFee,
+    lease,
+    note,
+    suggestedParams,
+  });
+
+  const transactions = groupTransactions([paymentWithFee]);
+  return { paymentIndex: 0, transactions };
 }
 
 /**
@@ -298,6 +360,7 @@ export async function coSignBase64Transaction(
 export async function resolveSuggestedParams(
   serverParams:
     | {
+        fee: number;
         firstValid: number;
         genesisHash: string;
         genesisId: string;
@@ -310,6 +373,7 @@ export async function resolveSuggestedParams(
 ): Promise<SuggestedTransactionParams> {
   if (serverParams) {
     return {
+      fee: BigInt(serverParams.fee),
       firstValid: BigInt(serverParams.firstValid),
       lastValid: BigInt(serverParams.lastValid),
       genesisHash: base64ToUint8Array(serverParams.genesisHash),
@@ -332,6 +396,7 @@ export async function resolveSuggestedParams(
   };
 
   return {
+    fee: BigInt(data.fee ?? 0),
     firstValid: BigInt(data["last-round"]),
     lastValid: BigInt(data["last-round"] + 1000),
     genesisHash: base64ToUint8Array(data["genesis-hash"]),

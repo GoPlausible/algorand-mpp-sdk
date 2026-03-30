@@ -7,6 +7,7 @@ import {
   decodeSignedTransaction,
   decodeTransaction,
   encodeSignedTransaction,
+  encodeTransactionRaw,
 } from "@algorandfoundation/algokit-utils/transact";
 import { Method, Receipt, Store } from "mppx";
 
@@ -21,6 +22,7 @@ import * as Methods from "../Methods.js";
 import {
   base64ToUint8Array,
   coSignBase64Transaction,
+  computeRequiredFee,
   uint8ArrayToBase64,
   resolveSuggestedParams,
 } from "../utils/transactions.js";
@@ -189,12 +191,14 @@ export function charge(parameters: charge.Parameters) {
         throw new Error(`Algod unreachable: ${res.status} ${res.statusText}`);
       }
       const data = (await res.json()) as {
+        fee: number;
         "genesis-hash": string;
         "genesis-id": string;
         "last-round": number;
         "min-fee": number;
       };
       const suggestedParams = {
+        fee: data.fee ?? 0,
         firstValid: data["last-round"],
         lastValid: data["last-round"] + 1000,
         genesisHash: data["genesis-hash"],
@@ -335,17 +339,27 @@ async function verifyTransaction(
       throw feePayerInvalid("Fee payer transaction not found in group");
     }
 
-    // Resolve minFee from challenge's suggestedParams or use default.
+    // Resolve fee params from challenge's suggestedParams or use defaults.
     const minFee = challenge.methodDetails.suggestedParams?.minFee
       ? BigInt(challenge.methodDetails.suggestedParams.minFee)
       : DEFAULT_MIN_FEE;
+    const feePerByte = challenge.methodDetails.suggestedParams?.fee
+      ? BigInt(challenge.methodDetails.suggestedParams.fee)
+      : 0n;
+
+    // Compute pooled minimum using spec formula:
+    //   sum(max(fee_per_byte * txn_size, min_fee)) for each txn
+    const pooledMinimum = computePooledMinimum(
+      transactions,
+      feePerByte,
+      minFee,
+    );
 
     // Verify fee payer transaction.
     verifyFeePayerTransaction(
       transactions[feePayerIndex],
       signerAddress,
-      transactions.length,
-      minFee,
+      pooledMinimum,
     );
 
     // Verify client transactions have fee=0 when fee payer is present (per spec).
@@ -558,11 +572,27 @@ function findFeePayerIndex(
   );
 }
 
+/**
+ * Compute the pooled minimum fee for a transaction group using the spec formula:
+ *   pooled_minimum = sum(max(fee_per_byte * txn_size, min_fee)) for each txn
+ */
+function computePooledMinimum(
+  transactions: Transaction[],
+  feePerByte: bigint,
+  minFee: bigint,
+): bigint {
+  let total = 0n;
+  for (const txn of transactions) {
+    const encoded = encodeTransactionRaw(txn);
+    total += computeRequiredFee(feePerByte, BigInt(encoded.length), minFee);
+  }
+  return total;
+}
+
 function verifyFeePayerTransaction(
   txn: Transaction,
   feePayerAddress: string,
-  groupSize: number,
-  minFee: bigint,
+  pooledMinimum: bigint,
 ) {
   if (txn.type !== TransactionType.Payment) {
     throw feePayerInvalid(
@@ -589,12 +619,11 @@ function verifyFeePayerTransaction(
   if (txn.rekeyTo) {
     throw dangerousTransaction("Fee payer transaction must not have rekeyTo");
   }
-  // Verify fee covers pooled minimum (N * minFee) with server-configured safety bound (N * minFee * 3).
-  const expectedFee = BigInt(groupSize) * minFee;
-  const maxReasonableFee = expectedFee * 3n;
-  if (txn.fee !== undefined && txn.fee < expectedFee) {
+  // Verify fee covers pooled minimum with safety bound (3x) against fee griefing.
+  const maxReasonableFee = pooledMinimum * 3n;
+  if (txn.fee !== undefined && txn.fee < pooledMinimum) {
     throw feePayerInvalid(
-      `Fee payer fee ${txn.fee} is below minimum ${expectedFee} for group of ${groupSize}`,
+      `Fee payer fee ${txn.fee} is below pooled minimum ${pooledMinimum}`,
     );
   }
   if (txn.fee !== undefined && txn.fee > maxReasonableFee) {
@@ -897,6 +926,7 @@ type ChallengeRequest = {
     lease?: string;
     network?: string;
     suggestedParams?: {
+      fee: number;
       firstValid: number;
       genesisHash: string;
       genesisId: string;

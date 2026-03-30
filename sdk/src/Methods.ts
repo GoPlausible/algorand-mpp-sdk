@@ -75,6 +75,8 @@ export const charge = Method.from({
         /** Suggested transaction parameters from the server. */
         suggestedParams: z.optional(
           z.object({
+            /** Suggested fee per byte in microalgos. 0 under normal conditions; increases under congestion. */
+            fee: z.number(),
             /** First valid round. */
             firstValid: z.number(),
             /** Genesis hash (base64). */
@@ -83,7 +85,7 @@ export const charge = Method.from({
             genesisId: z.string(),
             /** Last valid round. */
             lastValid: z.number(),
-            /** Current network minimum fee per transaction in microalgos. */
+            /** Network minimum fee per transaction in microalgos. */
             minFee: z.number(),
           }),
         ),
