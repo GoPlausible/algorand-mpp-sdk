@@ -353,9 +353,6 @@ async function verifyTransaction(
   // Mark consumed to prevent replay.
   await store.put(`algorand-charge:consumed:${txid}`, true);
 
-  // Note: the spec defines a `challengeId` field in the receipt, but the
-  // mppx Receipt schema does not support it. The challenge binding is
-  // enforced by the mppx framework through the challenge-credential flow.
   return Receipt.from({
     method: "algorand",
     reference: txid,
