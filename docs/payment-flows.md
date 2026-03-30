@@ -1,6 +1,6 @@
-# Payment Flows
+# Payment Flow
 
-## Server-Broadcast Mode
+## Server-Broadcast
 
 The client signs the transaction group and sends it to the server. The server co-signs (if fee sponsorship is enabled), simulates, and broadcasts.
 

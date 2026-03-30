@@ -24,7 +24,7 @@ This SDK implements MPP for the **Algorand blockchain**, supporting:
 - **Native ALGO payments** and **ASA payments** (USDC, etc.)
 - **Fee sponsorship** — server pays transaction fees on behalf of clients
 - **Lease-based idempotency** — protocol-level replay protection bound to each challenge
-- **Server-broadcast mode** — server broadcasts transactions
+- **Server-broadcast** — server broadcasts transactions
 
 Built on [`@algorandfoundation/algokit-utils`](https://github.com/algorandfoundation/algokit-utils-ts) v10 (no algosdk dependency) and the [`mppx`](https://www.npmjs.com/package/mppx) protocol library.
 

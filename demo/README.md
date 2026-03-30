@@ -10,7 +10,7 @@ It demonstrates:
 - **Native ALGO payments** — Weather API charges 0.01 ALGO per request
 - **USDC (ASA) payments** — Marketplace charges USDC for purchases
 - **Fee sponsorship** — Server optionally pays transaction fees on behalf of clients
-- **Server-broadcast mode** — Server receives signed transaction group, verifies, simulates, and broadcasts
+- **Server-broadcast** — Server receives signed transaction group, verifies, simulates, and broadcasts
 
 ## Quick Start
 
@@ -104,7 +104,7 @@ curl http://localhost:3000/api/v1/health
 
 ## Transaction Flow
 
-### Server-Broadcast Mode
+### Server-Broadcast
 
 1. Client sends `GET /api/v1/weather/tokyo`
 2. Server responds `402 Payment Required` with `WWW-Authenticate: Payment` header containing the charge challenge

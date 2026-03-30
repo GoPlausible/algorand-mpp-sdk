@@ -385,7 +385,7 @@ describe("Encoding: transaction roundtrip", () => {
 
 describe("End-to-end: full ALGO payment flow (TestNet)", () => {
   it.skipIf(!hasKey)(
-    "completes a self-payment via server-broadcast mode",
+    "completes a self-payment via server-broadcast",
     async () => {
       // This test sends 0.01 ALGO from the fee payer to itself.
       // It exercises the full 402 → build → sign → credential → verify → receipt flow.

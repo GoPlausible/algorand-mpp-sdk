@@ -213,7 +213,7 @@ export function charge(parameters: charge.Parameters) {
   });
 }
 
-// ── Server-broadcast mode verification (type="transaction") ──
+// ── Server-broadcast verification (type="transaction") ──
 
 async function verifyTransaction(
   credential: CredentialPayload,
