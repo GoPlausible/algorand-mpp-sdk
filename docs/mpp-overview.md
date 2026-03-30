@@ -49,10 +49,10 @@ Each blockchain has its own **method** that defines how payments are constructed
 
 ### Credentials
 
-After paying, the client sends a **credential** proving payment. Two types are supported:
+After paying, the client sends a **credential** proving payment:
 
-- **`type="transaction"`** (Server-broadcast mode) — The client sends the signed transaction group; the server broadcasts it
-- **`type="txid"`** (Client-broadcast mode) — The client broadcasts the transaction itself and sends the confirmed transaction ID
+- **`type="transaction"`** — The client sends the signed transaction group; the server broadcasts it
+
 
 ### Challenges
 

@@ -14,9 +14,7 @@ import { Method, Receipt, Store } from "mppx";
 import {
   ALGORAND_MAINNET,
   DEFAULT_ALGOD_URLS,
-  DEFAULT_INDEXER_URLS,
   DEFAULT_MIN_FEE,
-  NETWORK_GENESIS_HASH,
 } from "../constants.js";
 import * as Methods from "../Methods.js";
 import {
@@ -46,14 +44,6 @@ class AlgorandPaymentError extends Error {
 const malformedCredential = (detail: string) =>
   new AlgorandPaymentError("malformed-credential", detail);
 
-/** challenge.id matches no issued challenge, or challenge already consumed. */
-const unknownChallenge = (detail: string) =>
-  new AlgorandPaymentError("unknown-challenge", detail);
-
-/** payload.type is "txid" but challenge specifies feePayer: true. */
-const invalidCredentialType = (detail: string) =>
-  new AlgorandPaymentError("invalid-credential-type", detail);
-
 /** Too many transactions (>16), mismatched Group IDs, or paymentIndex out of range. */
 const groupInvalid = (detail: string) =>
   new AlgorandPaymentError("group-invalid", detail);
@@ -66,10 +56,6 @@ const dangerousTransaction = (detail: string) =>
 const transferMismatch = (detail: string) =>
   new AlgorandPaymentError("transfer-mismatch", detail);
 
-/** TxID cannot be fetched from Algorand network. */
-const transactionNotFound = (detail: string) =>
-  new AlgorandPaymentError("transaction-not-found", detail);
-
 /** Transaction group failed simulation or was rejected by network. */
 const transactionFailed = (detail: string) =>
   new AlgorandPaymentError("transaction-failed", detail);
@@ -78,10 +64,6 @@ const transactionFailed = (detail: string) =>
 const broadcastFailed = (detail: string) =>
   new AlgorandPaymentError("broadcast-failed", detail);
 
-/** TxID already used to fulfill a previous challenge. */
-const txidConsumed = (detail: string) =>
-  new AlgorandPaymentError("txid-consumed", detail);
-
 /** Fee payer transaction is invalid. */
 const feePayerInvalid = (detail: string) =>
   new AlgorandPaymentError("fee-payer-invalid", detail);
@@ -89,16 +71,9 @@ const feePayerInvalid = (detail: string) =>
 /**
  * Creates an Algorand `charge` method for usage on the server.
  *
- * Supports two settlement modes:
- *
- * - **Server-broadcast mode** (`type="transaction"`, default): The server
- *   receives a signed transaction group from the client, optionally
- *   co-signs the fee payer transaction, simulates, broadcasts, and
- *   verifies on-chain.
- *
- * - **Client-broadcast mode** (`type="txid"`): The client has already
- *   broadcast the transaction group. The server verifies the transfer
- *   on-chain using the TxID.
+ * The server receives a signed transaction group from the client,
+ * optionally co-signs the fee payer transaction, simulates,
+ * broadcasts, and verifies on-chain.
  *
  * @example
  * ```ts
@@ -133,10 +108,6 @@ export function charge(parameters: charge.Parameters) {
     parameters.algodUrl ??
     DEFAULT_ALGOD_URLS[network] ??
     DEFAULT_ALGOD_URLS[ALGORAND_MAINNET];
-  const indexerUrl =
-    parameters.indexerUrl ??
-    DEFAULT_INDEXER_URLS[network] ??
-    DEFAULT_INDEXER_URLS[ALGORAND_MAINNET];
 
   // Validate addresses at config time (checksum verification per spec).
   try {
@@ -226,48 +197,27 @@ export function charge(parameters: charge.Parameters) {
     async verify({ credential }) {
       const cred = credential as unknown as CredentialPayload;
       const challenge = cred.challenge.request;
-      const payloadType = resolvePayloadType(cred.payload);
 
-      // Spec: type="txid" MUST NOT be used with feePayer: true
-      if (payloadType === "txid" && challenge.methodDetails.feePayer) {
-        throw invalidCredentialType(
-          'type="txid" credentials cannot be used with fee sponsorship (feePayer: true)',
+      if (cred.payload.type !== "transaction") {
+        throw malformedCredential(
+          'Invalid payload type: must be "transaction"',
         );
       }
 
-      if (payloadType === "transaction") {
-        return await verifyTransaction(
-          cred,
-          challenge,
-          algodUrl,
-          recipient,
-          store,
-          signer,
-          signerAddress,
-        );
-      }
-
-      return await verifyTxid(cred, challenge, algodUrl, indexerUrl, recipient, store);
+      return await verifyTransaction(
+        cred,
+        challenge,
+        algodUrl,
+        recipient,
+        store,
+        signer,
+        signerAddress,
+      );
     },
   });
 }
 
-// ── Payload type resolution ──
-
-function resolvePayloadType(payload: {
-  paymentGroup?: string[];
-  paymentIndex?: number;
-  txid?: string;
-  type?: string;
-}): "transaction" | "txid" {
-  if (payload.type === "txid") return "txid";
-  if (payload.type === "transaction") return "transaction";
-  throw malformedCredential(
-    'Missing or invalid payload type: must be "transaction" or "txid"',
-  );
-}
-
-// ── Server-broadcast mode (type="transaction") ──
+// ── Server-broadcast mode verification (type="transaction") ──
 
 async function verifyTransaction(
   credential: CredentialPayload,
@@ -395,62 +345,6 @@ async function verifyTransaction(
 
   // Mark consumed to prevent replay.
   await store.put(`algorand-charge:consumed:${txid}`, true);
-
-  return Receipt.from({
-    method: "algorand",
-    reference: txid,
-    status: "success",
-    timestamp: new Date().toISOString(),
-  });
-}
-
-// ── Client-broadcast mode (type="txid") ──
-
-async function verifyTxid(
-  credential: CredentialPayload,
-  challenge: ChallengeRequest,
-  algodUrl: string,
-  indexerUrl: string,
-  recipient: string,
-  store: Store.Store,
-) {
-  const { txid } = credential.payload;
-  if (!txid) {
-    throw malformedCredential("Missing txid in credential payload");
-  }
-
-  // Validate TxID format (52-char base32).
-  if (!/^[A-Z2-7]{52}$/.test(txid)) {
-    throw malformedCredential(
-      "Invalid txid format: must be 52-character base32",
-    );
-  }
-
-  // Replay prevention.
-  const consumedKey = `algorand-charge:consumed:${txid}`;
-  if (await store.get(consumedKey)) {
-    throw txidConsumed("Transaction identifier already consumed");
-  }
-
-  // Fetch transaction: algod pending first, then indexer fallback with retry.
-  const tx = await fetchTransactionWithRetry(algodUrl, indexerUrl, txid);
-  if (!tx) {
-    throw transactionNotFound("Transaction not found or not yet confirmed");
-  }
-
-  // Verify transfer details.
-  verifyOnChainTransaction(tx, challenge, recipient);
-
-  // Verify lease if present in challenge.
-  if (challenge.methodDetails.lease && tx.lease) {
-    const expectedLease = challenge.methodDetails.lease;
-    if (tx.lease !== expectedLease) {
-      throw transferMismatch("On-chain transaction lease does not match expected value");
-    }
-  }
-
-  // Mark consumed.
-  await store.put(consumedKey, true);
 
   return Receipt.from({
     method: "algorand",
@@ -634,68 +528,7 @@ function verifyFeePayerTransaction(
   }
 }
 
-function verifyOnChainTransaction(
-  tx: IndexerTransaction,
-  challenge: ChallengeRequest,
-  recipient: string,
-) {
-  const { asaId } = challenge.methodDetails;
-  const expectedAmount = BigInt(challenge.amount);
-
-  if (asaId) {
-    if (tx["tx-type"] !== "axfer") {
-      throw transferMismatch(
-        `Expected axfer transaction, got ${tx["tx-type"]}`,
-      );
-    }
-    const xfer = tx["asset-transfer-transaction"];
-    if (!xfer) throw transferMismatch("Missing asset-transfer-transaction");
-    if (String(xfer["asset-id"]) !== asaId) {
-      throw transferMismatch(
-        `ASA ID mismatch: expected ${asaId}, got ${xfer["asset-id"]}`,
-      );
-    }
-    if (BigInt(xfer.amount) !== expectedAmount) {
-      throw transferMismatch(
-        `Amount mismatch: expected ${expectedAmount}, got ${xfer.amount}`,
-      );
-    }
-    if (xfer.receiver !== recipient) {
-      throw transferMismatch(
-        `Recipient mismatch: expected ${recipient}, got ${xfer.receiver}`,
-      );
-    }
-  } else {
-    if (tx["tx-type"] !== "pay") {
-      throw transferMismatch(`Expected pay transaction, got ${tx["tx-type"]}`);
-    }
-    const pay = tx["payment-transaction"];
-    if (!pay) throw transferMismatch("Missing payment-transaction");
-    if (BigInt(pay.amount) !== expectedAmount) {
-      throw transferMismatch(
-        `Amount mismatch: expected ${expectedAmount}, got ${pay.amount}`,
-      );
-    }
-    if (pay.receiver !== recipient) {
-      throw transferMismatch(
-        `Recipient mismatch: expected ${recipient}, got ${pay.receiver}`,
-      );
-    }
-  }
-
-  // Check for dangerous fields.
-  if (tx["payment-transaction"]?.["close-remainder-to"]) {
-    throw dangerousTransaction("Transaction contains close-remainder-to");
-  }
-  if (tx["asset-transfer-transaction"]?.["close-to"]) {
-    throw dangerousTransaction("Transaction contains close-to");
-  }
-  if (tx["rekey-to"]) {
-    throw dangerousTransaction("Transaction contains rekey-to");
-  }
-}
-
-// ── Algod/Indexer RPC helpers ──
+// ── Algod RPC helpers ──
 
 async function simulateGroup(
   algodUrl: string,
@@ -781,115 +614,6 @@ async function waitForConfirmation(
   throw transactionFailed("Transaction confirmation timeout");
 }
 
-/**
- * Fetch a confirmed transaction: algod pending endpoint first, indexer fallback.
- * Retries with exponential backoff up to ~10s per spec.
- */
-async function fetchTransactionWithRetry(
-  algodUrl: string,
-  indexerUrl: string,
-  txid: string,
-): Promise<IndexerTransaction | null> {
-  // Try algod pending endpoint first (most recent confirmed round).
-  const pendingTx = await fetchTransactionFromAlgod(algodUrl, txid);
-  if (pendingTx) return pendingTx;
-
-  // Retry with exponential backoff: 1s, 2s, 4s (~7s total, under 10s).
-  const delays = [1000, 2000, 4000];
-  for (const delay of delays) {
-    await new Promise((r) => setTimeout(r, delay));
-
-    const algodTx = await fetchTransactionFromAlgod(algodUrl, txid);
-    if (algodTx) return algodTx;
-
-    const indexerTx = await fetchTransactionFromIndexer(indexerUrl, txid);
-    if (indexerTx) return indexerTx;
-  }
-
-  return null;
-}
-
-async function fetchTransactionFromAlgod(
-  algodUrl: string,
-  txid: string,
-): Promise<IndexerTransaction | null> {
-  try {
-    const response = await fetch(`${algodUrl}/v2/transactions/pending/${txid}`);
-    if (!response.ok) return null;
-
-    const data = (await response.json()) as {
-      "confirmed-round"?: number;
-      "pool-error"?: string;
-      txn?: {
-        txn: {
-          type: string;
-          amt?: number;
-          rcv?: string;
-          snd?: string;
-          xaid?: number;
-          aamt?: number;
-          arcv?: string;
-          close?: string;
-          aclose?: string;
-          rekey?: string;
-          lx?: string;
-        };
-      };
-    };
-
-    if (!data["confirmed-round"] || data["confirmed-round"] <= 0) return null;
-    if (!data.txn?.txn) return null;
-
-    const raw = data.txn.txn;
-    // Convert algod pending format to indexer-like format.
-    const tx: IndexerTransaction = {
-      id: txid,
-      sender: raw.snd ?? "",
-      "tx-type": raw.type === "pay" ? "pay" : raw.type === "axfer" ? "axfer" : raw.type,
-      "confirmed-round": data["confirmed-round"],
-      ...(raw.lx ? { lease: raw.lx } : {}),
-      ...(raw.rekey ? { "rekey-to": raw.rekey } : {}),
-    };
-
-    if (raw.type === "pay") {
-      tx["payment-transaction"] = {
-        amount: raw.amt ?? 0,
-        receiver: raw.rcv ?? "",
-        ...(raw.close ? { "close-remainder-to": raw.close } : {}),
-      };
-    } else if (raw.type === "axfer") {
-      tx["asset-transfer-transaction"] = {
-        amount: raw.aamt ?? 0,
-        "asset-id": raw.xaid ?? 0,
-        receiver: raw.arcv ?? "",
-        ...(raw.aclose ? { "close-to": raw.aclose } : {}),
-      };
-    }
-
-    return tx;
-  } catch {
-    return null;
-  }
-}
-
-async function fetchTransactionFromIndexer(
-  indexerUrl: string,
-  txid: string,
-): Promise<IndexerTransaction | null> {
-  try {
-    const response = await fetch(`${indexerUrl}/v2/transactions/${txid}`);
-    if (!response.ok) return null;
-
-    const data = (await response.json()) as {
-      transaction?: IndexerTransaction;
-    };
-
-    return data.transaction ?? null;
-  } catch {
-    return null;
-  }
-}
-
 // ── Helpers ──
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -910,7 +634,6 @@ type CredentialPayload = {
   payload: {
     paymentGroup?: string[];
     paymentIndex?: number;
-    txid?: string;
     type?: string;
   };
 };
@@ -938,26 +661,6 @@ type ChallengeRequest = {
   recipient: string;
 };
 
-type IndexerTransaction = {
-  "asset-transfer-transaction"?: {
-    amount: number;
-    "asset-id": number;
-    "close-to"?: string;
-    receiver: string;
-  };
-  "confirmed-round"?: number;
-  id: string;
-  lease?: string;
-  "payment-transaction"?: {
-    amount: number;
-    "close-remainder-to"?: string;
-    receiver: string;
-  };
-  "rekey-to"?: string;
-  sender: string;
-  "tx-type": string;
-};
-
 export declare namespace charge {
   type Parameters = {
     /** ASA ID for token payments. If absent, payments are in native ALGO. */
@@ -966,8 +669,6 @@ export declare namespace charge {
     algodUrl?: string;
     /** Token decimals (required when asaId is set). */
     decimals?: number;
-    /** Custom indexer URL. Defaults to public indexer for the selected network. */
-    indexerUrl?: string;
     /** CAIP-2 network identifier. Defaults to Algorand MainNet. */
     network?: string;
     /** Algorand address of the account receiving payments. */

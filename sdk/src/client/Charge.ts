@@ -7,22 +7,15 @@ import {
   resolveSuggestedParams,
   signAndEncodeGroup,
   base64ToUint8Array,
-  uint8ArrayToBase64,
   type TransactionEncoder,
 } from "../utils/transactions.js";
 
 /**
  * Creates an Algorand `charge` method for usage on the client.
  *
- * Supports two modes controlled by the `broadcast` option:
- *
- * - **Server-broadcast mode** (`broadcast: false`, default): Signs the
- *   transaction group and sends the serialized group as a `type="transaction"`
- *   credential. The server broadcasts it to the Algorand network.
- *
- * - **Client-broadcast mode** (`broadcast: true`): Signs, broadcasts,
- *   confirms the transaction on-chain, and sends the TxID as a
- *   `type="txid"` credential. Cannot be used with fee sponsorship.
+ * The client signs the transaction group and sends the serialized group
+ * as a `type="transaction"` credential. The server broadcasts it to the
+ * Algorand network.
  *
  * When the server advertises `feePayer: true` in the challenge, the client
  * includes an unsigned fee payer transaction in the group. The server adds
@@ -43,7 +36,6 @@ export function charge(parameters: charge.Parameters) {
   const {
     signer,
     senderAddress,
-    broadcast = false,
     onProgress,
     encoder,
   } = parameters;
@@ -77,7 +69,7 @@ export function charge(parameters: charge.Parameters) {
         type: "challenge",
       });
 
-      const useServerFeePayer = serverPaysFees && feePayerKey && !broadcast;
+      const useServerFeePayer = !!(serverPaysFees && feePayerKey);
 
       // Resolve suggested params.
       const txnParams = await resolveSuggestedParams(
@@ -98,7 +90,7 @@ export function charge(parameters: charge.Parameters) {
         challengeReference,
         externalId: challenge.request.externalId,
         lease,
-        useServerFeePayer: !!useServerFeePayer,
+        useServerFeePayer,
         feePayerKey,
         suggestedParams: txnParams,
       });
@@ -114,24 +106,6 @@ export function charge(parameters: charge.Parameters) {
         encoder,
       });
 
-      if (broadcast) {
-        // ── Client-broadcast mode (type="txid") ──
-        onProgress?.({ type: "paying" });
-
-        // Combine all signed transactions for broadcast.
-        const groupBytes = paymentGroup.map((b64) => base64ToUint8Array(b64));
-        const txid = await broadcastAndConfirm(algodUrl, groupBytes);
-
-        onProgress?.({ txid, type: "paid" });
-
-        return Credential.serialize({
-          challenge,
-          source: senderAddress,
-          payload: { txid, type: "txid" },
-        });
-      }
-
-      // ── Server-broadcast mode (type="transaction", default) ──
       onProgress?.({ paymentGroup, type: "signed" });
 
       return Credential.serialize({
@@ -143,73 +117,6 @@ export function charge(parameters: charge.Parameters) {
   });
 
   return method;
-}
-
-// ── Client-broadcast mode helpers ──
-
-/**
- * Broadcast a transaction group and wait for confirmation.
- * Returns the TxID of the first transaction in the group.
- */
-async function broadcastAndConfirm(
-  algodUrl: string,
-  groupBytes: Uint8Array[],
-): Promise<string> {
-  // Concatenate all transaction bytes for raw send.
-  const totalLength = groupBytes.reduce((sum, b) => sum + b.length, 0);
-  const combined = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const bytes of groupBytes) {
-    combined.set(bytes, offset);
-    offset += bytes.length;
-  }
-
-  // Send raw transaction group.
-  const response = await fetch(`${algodUrl}/v2/transactions`, {
-    body: combined,
-    headers: { "Content-Type": "application/x-binary" },
-    method: "POST",
-  });
-
-  const data = (await response.json()) as { txId?: string; message?: string };
-  if (!data.txId) {
-    throw new Error(
-      `Failed to broadcast transaction: ${data.message ?? "unknown error"}`,
-    );
-  }
-
-  const txid = data.txId;
-
-  // Wait for confirmation.
-  await waitForConfirmation(algodUrl, txid);
-
-  return txid;
-}
-
-async function waitForConfirmation(
-  algodUrl: string,
-  txid: string,
-  timeoutMs = 30_000,
-) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const response = await fetch(`${algodUrl}/v2/transactions/pending/${txid}`);
-    const data = (await response.json()) as {
-      "confirmed-round"?: number;
-      "pool-error"?: string;
-    };
-
-    if (data["confirmed-round"] && data["confirmed-round"] > 0) {
-      return;
-    }
-
-    if (data["pool-error"]) {
-      throw new Error(`Transaction failed: ${data["pool-error"]}`);
-    }
-
-    await new Promise((r) => setTimeout(r, 2_000));
-  }
-  throw new Error("Transaction confirmation timeout");
 }
 
 export declare namespace charge {
@@ -233,15 +140,6 @@ export declare namespace charge {
       txns: Uint8Array[],
       indexesToSign?: number[],
     ) => Promise<(Uint8Array | null)[]>;
-    /**
-     * If true, the client broadcasts the transaction group and sends the TxID
-     * as a `type="txid"` credential. If false (default), the client sends
-     * the signed transaction group as a `type="transaction"` credential and the
-     * server broadcasts it.
-     *
-     * Cannot be used with server fee sponsorship (feePayer mode).
-     */
-    broadcast?: boolean;
     /** Custom algod URL. If not set, inferred from the challenge's network field. */
     algodUrl?: string;
     /** Called at each step of the payment process. */
@@ -263,8 +161,6 @@ export declare namespace charge {
         asaId?: string;
         type: "challenge";
       }
-    | { txid: string; type: "paid" }
     | { paymentGroup: string[]; type: "signed" }
-    | { type: "paying" }
     | { type: "signing" };
 }

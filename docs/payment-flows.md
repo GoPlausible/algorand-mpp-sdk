@@ -1,8 +1,8 @@
 # Payment Flows
 
-## Server-Broadcast Mode (Default)
+## Server-Broadcast Mode
 
-In server-broadcast mode, the client signs the transaction group and sends it to the server. The server co-signs (if fee sponsorship is enabled), simulates, and broadcasts.
+The client signs the transaction group and sends it to the server. The server co-signs (if fee sponsorship is enabled), simulates, and broadcasts.
 
 ```
 Client                              Server                          Algorand
@@ -42,43 +42,6 @@ Client                              Server                          Algorand
   |  200 OK                           |                               |
   |  Payment-Receipt: { txid, ... }   |                               |
   |  { weather data }                 |                               |
-  |<----------------------------------|                               |
-```
-
-## Client-Broadcast Mode (Fallback)
-
-In client-broadcast mode, the client broadcasts the transaction itself and sends the confirmed TxID. Client-broadcast mode cannot be used with fee sponsorship.
-
-```
-Client                              Server                          Algorand
-  |                                   |                               |
-  |  GET /api/v1/weather/tokyo        |                               |
-  |---------------------------------->|                               |
-  |                                   |                               |
-  |  402 Payment Required             |                               |
-  |<----------------------------------|                               |
-  |                                   |                               |
-  |  Build & sign txn group           |                               |
-  |  Broadcast to Algorand            |                               |
-  |-------------------------------------------------------------->   |
-  |                                   |                               |
-  |  Confirmed: TXID_ABC...          |                               |
-  |<--------------------------------------------------------------|  |
-  |                                   |                               |
-  |  GET /api/v1/weather/tokyo        |                               |
-  |  Authorization: Payment           |                               |
-  |  { txid: "TXID_ABC...",           |                               |
-  |    type: "txid" }                 |                               |
-  |---------------------------------->|                               |
-  |                                   |  Lookup txn (algod, then      |
-  |                                   |  indexer with retry)           |
-  |                                   |------------------------------>|
-  |                                   |  Verify amount, recipient,    |
-  |                                   |  lease                        |
-  |                                   |<------------------------------|
-  |                                   |                               |
-  |  200 OK                           |                               |
-  |  Payment-Receipt: { txid, ... }   |                               |
   |<----------------------------------|                               |
 ```
 

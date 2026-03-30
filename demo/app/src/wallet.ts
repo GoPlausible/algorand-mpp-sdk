@@ -53,8 +53,6 @@ type ProgressEvent =
   | { type: 'challenge'; recipient: string; amount: string; currency: string; asaId?: string; feePayerKey?: string }
   | { type: 'signing' }
   | { type: 'signed'; paymentGroup: string[] }
-  | { type: 'paying' }
-  | { type: 'paid'; txid: string }
 
 let progressCallback: ((event: ProgressEvent) => void) | null = null
 
@@ -88,8 +86,6 @@ export type Step =
   | { type: 'request'; url: string }
   | { type: 'challenge'; amount: string; recipient: string; currency?: string; feePayerKey?: string }
   | { type: 'signing' }
-  | { type: 'paying' }
-  | { type: 'paid'; txid: string }
   | { type: 'success'; data: unknown; status: number }
   | { type: 'error'; message: string }
 
@@ -120,12 +116,6 @@ export async function* payAndFetch(
         break
       case 'signed':
         return // internal detail, skip
-      case 'paying':
-        step = { type: 'paying' }
-        break
-      case 'paid':
-        step = { type: 'paid', txid: event.txid }
-        break
     }
     steps.push(step)
     resolve?.()

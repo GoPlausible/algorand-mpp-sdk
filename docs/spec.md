@@ -24,12 +24,9 @@ Networks are identified using [CAIP-2](https://github.com/ChainAgnostic/CAIPs/bl
 | MainNet | `algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=` |
 | TestNet | `algorand:SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=` |
 
-### Dual Settlement Modes
+### Settlement
 
-| Mode | Credential Type | Who Broadcasts | Use Case |
-|------|----------------|----------------|----------|
-| **Server-broadcast** | `type="transaction"` | Server | Default. Enables fee sponsorship. Server has full control. |
-| **Client-broadcast** | `type="txid"` | Client | Fallback when server can't broadcast. No fee sponsorship. |
+The client signs the transaction group and sends it to the server as a `type="transaction"` credential. The server verifies, optionally co-signs the fee payer, and broadcasts to the Algorand network.
 
 ### Native ALGO and ASA Support
 
@@ -66,7 +63,7 @@ The server's 402 response includes `methodDetails` specific to Algorand:
 
 ## Credential Structure
 
-### Server-Broadcast Mode (type="transaction")
+### Credential Payload
 
 ```json
 {
@@ -79,14 +76,6 @@ The server's 402 response includes `methodDetails` specific to Algorand:
 }
 ```
 
-### Client-Broadcast Mode (type="txid")
-
-```json
-{
-  "txid": "ALGORAND_TXID_52CHARS...",
-  "type": "txid"
-}
-```
 
 ## Security Considerations
 

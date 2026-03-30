@@ -20,7 +20,6 @@ import { charge } from "../server/Charge.js";
 import {
   ALGORAND_TESTNET,
   DEFAULT_ALGOD_URLS,
-  DEFAULT_INDEXER_URLS,
 } from "../constants.js";
 import {
   buildChargeGroup,
@@ -34,7 +33,6 @@ import { encodeTransactionRaw } from "@algorandfoundation/algokit-utils/transact
 // ── Test configuration ──
 
 const TESTNET_ALGOD = DEFAULT_ALGOD_URLS[ALGORAND_TESTNET];
-const TESTNET_INDEXER = DEFAULT_INDEXER_URLS[ALGORAND_TESTNET];
 const USDC_ASA_ID = 10458941n;
 const USDC_DECIMALS = 6;
 
@@ -84,7 +82,6 @@ function createMppx(opts: {
         recipient: opts.recipient,
         network: ALGORAND_TESTNET,
         algodUrl: TESTNET_ALGOD,
-        indexerUrl: TESTNET_INDEXER,
         ...(opts.asaId ? { asaId: opts.asaId, decimals: opts.decimals } : {}),
         ...(opts.signer && opts.signerAddress
           ? {
@@ -401,8 +398,7 @@ describe("End-to-end: full ALGO payment flow (TestNet)", () => {
             recipient: feePayerAddress, // Pay to self for testing
             network: ALGORAND_TESTNET,
             algodUrl: TESTNET_ALGOD,
-            indexerUrl: TESTNET_INDEXER,
-            signer: feePayerSigner,
+                signer: feePayerSigner,
             signerAddress: feePayerAddress,
             store,
           }),

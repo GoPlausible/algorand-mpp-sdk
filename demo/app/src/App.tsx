@@ -150,12 +150,6 @@ export default function App() {
         case 'signing':
           addLog('Signing transaction group...', 'info')
           break
-        case 'paying':
-          addLog('Broadcasting to Algorand...', 'info')
-          break
-        case 'paid':
-          addLog(`Confirmed: ${step.txid.slice(0, 20)}...`, 'info')
-          break
         case 'success':
           addLog(`${step.status} OK`, 'ok')
           addLog(JSON.stringify(step.data, null, 2).slice(0, 500), 'dim')

@@ -56,7 +56,7 @@ A React + Vite single-page application that:
 - Referrer input accepts NFD names — resolved to deposit address before sending
 - NFD lookups always use mainnet API (NFDs don't exist on testnet)
 
-### 6. Server-Broadcast Mode (Default)
+### 6. Server-Broadcast Settlement
 
 - Client signs transactions and sends the group to the server
 - Server verifies, co-signs fee payer, simulates, and broadcasts

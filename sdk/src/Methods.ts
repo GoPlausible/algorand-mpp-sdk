@@ -3,14 +3,9 @@ import { Method, z } from "mppx";
 /**
  * Algorand charge method — shared schema used by both server and client.
  *
- * Supports two settlement modes:
- *
- * - **Server-broadcast mode** (`type="transaction"`, default): Client signs the
- *   transaction group and sends the serialized bytes to the server.
- *   The server broadcasts it to the Algorand network.
- *
- * - **Client-broadcast mode** (`type="txid"`): Client broadcasts the transaction
- *   group itself and sends the confirmed TxID. The server verifies on-chain.
+ * The client signs the transaction group and sends the serialized bytes
+ * to the server. The server verifies, optionally co-signs a fee payer
+ * transaction, and broadcasts it to the Algorand network.
  */
 export const charge = Method.from({
   intent: "charge",
@@ -20,20 +15,14 @@ export const charge = Method.from({
       payload: z.object({
         /**
          * Array of base64-encoded msgpack-serialized transactions (signed or unsigned).
-         * Max 16 elements. Present when type="transaction".
+         * Max 16 elements.
          */
-        paymentGroup: z.optional(z.array(z.string())),
+        paymentGroup: z.array(z.string()),
         /**
          * Zero-based index into paymentGroup identifying the primary payment transaction.
-         * Present when type="transaction".
          */
-        paymentIndex: z.optional(z.number()),
-        /**
-         * 52-character base32 Algorand transaction identifier.
-         * Present when type="txid".
-         */
-        txid: z.optional(z.string()),
-        /** Payload type: "transaction" (server broadcasts) or "txid" (client already broadcast). */
+        paymentIndex: z.number(),
+        /** Payload type. Must be "transaction". */
         type: z.string(),
       }),
     },
