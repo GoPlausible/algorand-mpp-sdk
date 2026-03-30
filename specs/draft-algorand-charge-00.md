@@ -1056,17 +1056,21 @@ The receipt payload for Algorand charge:
 | Field | Type | Description |
 |-------|------|-------------|
 | `method` | string | `"algorand"` |
-| `challengeId` | string | The challenge `id` from `WWW-Authenticate` |
 | `reference` | string | The transaction identifier (52-character base32 TxID) |
 | `status` | string | `"success"` |
 | `timestamp` | string | {{RFC3339}} verification time |
+
+Note: challenge-to-receipt binding is handled by the
+framework itself — the credential echoes the challenge
+`id`, which the server verifies before issuing the
+receipt. The receipt does not duplicate the challenge
+identifier.
 
 Example (decoded):
 
 ~~~json
 {
   "method": "algorand",
-  "challengeId": "kM9xPqWvT2nJrHsY4aDfEb",
   "reference": "NTRZR6HGMMZGYMJKUNVNLKLA427ACAVIPFNC6J\
 HA5XNBQQHW7MWA",
   "status": "success",
