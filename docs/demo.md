@@ -9,7 +9,7 @@ The demo is a full-stack application demonstrating the Algorand MPP SDK in actio
 An Express.js server that exposes paid endpoints using the MPP SDK's server-side `algorand.charge()`.
 
 - **Weather API** — Charges 0.01 ALGO per request (native ALGO payments)
-- **Marketplace** — Charges USDC for product purchases (ASA payments with splits)
+- **Marketplace** — Charges USDC for product purchases (ASA payments)
 - **Health endpoint** — Reports server status, network, and fee payer info
 
 ### App (`demo/app/`)
@@ -40,16 +40,7 @@ A React + Vite single-page application that:
 - Products: Algorand Hoodie (0.17 USDC), Validator Mug (0.15 USDC), NFT Sticker Pack (0.10 USDC)
 - Requires USDC opt-in for the buyer
 
-### 3. Payment Splits (Platform + Referral)
-
-**Flow:** Client buys with referrer → atomic group splits payment to seller, platform, and referrer
-
-- Demonstrates atomic payment splitting
-- Platform fee: 5% of product price
-- Referral commission: 2% of product price (optional)
-- All splits execute in a single atomic transaction group
-
-### 4. Fee Sponsorship
+### 3. Fee Sponsorship
 
 **Flow:** Server pays transaction fees on behalf of the client
 
@@ -65,7 +56,7 @@ A React + Vite single-page application that:
 - Referrer input accepts NFD names — resolved to deposit address before sending
 - NFD lookups always use mainnet API (NFDs don't exist on testnet)
 
-### 6. Pull Mode (Default)
+### 6. Server-Broadcast Mode (Default)
 
 - Client signs transactions and sends the group to the server
 - Server verifies, co-signs fee payer, simulates, and broadcasts

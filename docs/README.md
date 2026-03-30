@@ -16,7 +16,7 @@ Built on [`@algorandfoundation/algokit-utils`](https://github.com/algorandfounda
 | [What is MPP?](./mpp-overview.md) | Overview of the Machine Payments Protocol |
 | [Algorand Charge Spec](./spec.md) | The Algorand-specific charge method specification |
 | [Architecture](./architecture.md) | SDK architecture, modules, and design decisions |
-| [Payment Flows](./payment-flows.md) | Pull mode, push mode, fee sponsorship, and splits |
+| [Payment Flows](./payment-flows.md) | Server-broadcast mode, client-broadcast mode, and fee sponsorship |
 | [Demo Guide](./demo.md) | Demo application features, scenarios, and setup |
 | [Demo README](../demo/README.md) | Demo quick start, configuration, and API reference |
 | [Full Specification](../specs/draft-algorand-charge-00.md) | Complete Algorand MPP IETF-style specification document |

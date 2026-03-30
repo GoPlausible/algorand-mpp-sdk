@@ -16,13 +16,13 @@ import {
  *
  * Supports two modes controlled by the `broadcast` option:
  *
- * - **Pull mode** (`broadcast: false`, default): Signs the transaction
- *   group and sends the serialized group as a `type="transaction"` credential.
- *   The server broadcasts it to the Algorand network.
+ * - **Server-broadcast mode** (`broadcast: false`, default): Signs the
+ *   transaction group and sends the serialized group as a `type="transaction"`
+ *   credential. The server broadcasts it to the Algorand network.
  *
- * - **Push mode** (`broadcast: true`): Signs, broadcasts, confirms
- *   the transaction on-chain, and sends the TxID as a `type="txid"`
- *   credential. Cannot be used with fee sponsorship.
+ * - **Client-broadcast mode** (`broadcast: true`): Signs, broadcasts,
+ *   confirms the transaction on-chain, and sends the TxID as a
+ *   `type="txid"` credential. Cannot be used with fee sponsorship.
  *
  * When the server advertises `feePayer: true` in the challenge, the client
  * includes an unsigned fee payer transaction in the group. The server adds
@@ -115,7 +115,7 @@ export function charge(parameters: charge.Parameters) {
       });
 
       if (broadcast) {
-        // ── Push mode (type="txid") ──
+        // ── Client-broadcast mode (type="txid") ──
         onProgress?.({ type: "paying" });
 
         // Combine all signed transactions for broadcast.
@@ -131,7 +131,7 @@ export function charge(parameters: charge.Parameters) {
         });
       }
 
-      // ── Pull mode (type="transaction", default) ──
+      // ── Server-broadcast mode (type="transaction", default) ──
       onProgress?.({ paymentGroup, type: "signed" });
 
       return Credential.serialize({
@@ -145,7 +145,7 @@ export function charge(parameters: charge.Parameters) {
   return method;
 }
 
-// ── Push mode helpers ──
+// ── Client-broadcast mode helpers ──
 
 /**
  * Broadcast a transaction group and wait for confirmation.

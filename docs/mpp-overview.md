@@ -51,8 +51,8 @@ Each blockchain has its own **method** that defines how payments are constructed
 
 After paying, the client sends a **credential** proving payment. Two types are supported:
 
-- **`type="transaction"`** (Pull mode) — The client sends the signed transaction group; the server broadcasts it
-- **`type="txid"`** (Push mode) — The client broadcasts the transaction itself and sends the confirmed transaction ID
+- **`type="transaction"`** (Server-broadcast mode) — The client sends the signed transaction group; the server broadcasts it
+- **`type="txid"`** (Client-broadcast mode) — The client broadcasts the transaction itself and sends the confirmed transaction ID
 
 ### Challenges
 
@@ -61,7 +61,7 @@ The server's 402 response contains a **challenge** with all information needed t
 - `amount` — Payment amount in base units
 - `currency` — Token identifier (ALGO, USDC, etc.)
 - `recipient` — Receiving Algorand address
-- `methodDetails` — Algorand-specific parameters (network, ASA ID, fee payer, splits, suggested params)
+- `methodDetails` — Algorand-specific parameters (network, ASA ID, fee payer, lease, suggested params)
 
 ## MPP vs Traditional Payment APIs
 

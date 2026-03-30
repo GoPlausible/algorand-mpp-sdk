@@ -91,13 +91,14 @@ const feePayerInvalid = (detail: string) =>
  *
  * Supports two settlement modes:
  *
- * - **Pull mode** (`type="transaction"`, default): The server receives a
- *   signed transaction group from the client, optionally co-signs the
- *   fee payer transaction, simulates, broadcasts, and verifies on-chain.
+ * - **Server-broadcast mode** (`type="transaction"`, default): The server
+ *   receives a signed transaction group from the client, optionally
+ *   co-signs the fee payer transaction, simulates, broadcasts, and
+ *   verifies on-chain.
  *
- * - **Push mode** (`type="txid"`): The client has already broadcast
- *   the transaction group. The server verifies the transfer on-chain
- *   using the TxID.
+ * - **Client-broadcast mode** (`type="txid"`): The client has already
+ *   broadcast the transaction group. The server verifies the transfer
+ *   on-chain using the TxID.
  *
  * @example
  * ```ts
@@ -266,7 +267,7 @@ function resolvePayloadType(payload: {
   );
 }
 
-// ── Pull mode (type="transaction") ──
+// ── Server-broadcast mode (type="transaction") ──
 
 async function verifyTransaction(
   credential: CredentialPayload,
@@ -403,7 +404,7 @@ async function verifyTransaction(
   });
 }
 
-// ── Push mode (type="txid") ──
+// ── Client-broadcast mode (type="txid") ──
 
 async function verifyTxid(
   credential: CredentialPayload,

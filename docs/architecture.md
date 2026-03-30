@@ -64,10 +64,6 @@ const mppx = Mppx.create({
       // Optional: ASA payments
       asaId: 10458941n,
       decimals: 6,
-      // Optional: payment splits
-      splits: [
-        { recipient: 'PLATFORM_ADDRESS...', amount: '500', memo: 'platform fee' }
-      ],
     }),
   ],
 })
@@ -80,15 +76,17 @@ algorand.charge() server factory
   │
   ├── createChallenge()
   │   ├── Fetch suggested params from algod
-  │   ├── Generate unique reference ID
+  │   ├── Generate unique challengeReference
+  │   ├── Derive lease from challengeReference (SHA-256)
   │   └── Return challenge with methodDetails
   │
   └── verify()
       ├── Decode transaction group (signed + unsigned)
       ├── Verify group ID consistency
       ├── Verify payment amount, recipient, ASA ID
-      ├── Verify splits match challenge
+      ├── Verify lease matches expected value
       ├── Check for dangerous fields (rekey, close-to)
+      ├── Verify fee payer (pooled fee via formula)
       ├── Co-sign fee payer transaction (if applicable)
       ├── Simulate transaction group
       └── Broadcast to Algorand network
@@ -164,11 +162,11 @@ export const charge = Method.from({
       recipient: z.string(),
       methodDetails: z.object({
         network: z.optional(z.string()),
-        reference: z.string(),
+        challengeReference: z.string(),
+        lease: z.optional(z.string()),
         asaId: z.optional(z.string()),
         feePayer: z.optional(z.boolean()),
         feePayerKey: z.optional(z.string()),
-        splits: z.optional(z.array(z.object({ ... }))),
         suggestedParams: z.optional(z.object({ ... })),
       }),
     }),

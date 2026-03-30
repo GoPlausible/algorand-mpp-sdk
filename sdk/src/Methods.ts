@@ -5,11 +5,11 @@ import { Method, z } from "mppx";
  *
  * Supports two settlement modes:
  *
- * - **Pull mode** (`type="transaction"`, default): Client signs the
+ * - **Server-broadcast mode** (`type="transaction"`, default): Client signs the
  *   transaction group and sends the serialized bytes to the server.
  *   The server broadcasts it to the Algorand network.
  *
- * - **Push mode** (`type="txid"`): Client broadcasts the transaction
+ * - **Client-broadcast mode** (`type="txid"`): Client broadcasts the transaction
  *   group itself and sends the confirmed TxID. The server verifies on-chain.
  */
 export const charge = Method.from({

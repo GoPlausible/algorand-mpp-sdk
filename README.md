@@ -22,11 +22,10 @@ MPP is designed for **machine-to-machine payments** — AI agents, automated sys
 This SDK implements MPP for the **Algorand blockchain**, supporting:
 
 - **Native ALGO payments** and **ASA payments** (USDC, etc.)
-- **Atomic payment splits** — distribute funds to multiple recipients in one transaction group
 - **Fee sponsorship** — server pays transaction fees on behalf of clients
-- **Pull mode** — server broadcasts transactions (default)
-- **Push mode** — client broadcasts and sends TxID as proof
-- **NFDomains** (.algo name) resolution for wallet display and referrals
+- **Lease-based idempotency** — protocol-level replay protection bound to each challenge
+- **Server-broadcast mode** — server broadcasts transactions (default)
+- **Client-broadcast mode** — client broadcasts and sends TxID as proof
 
 Built on [`@algorandfoundation/algokit-utils`](https://github.com/algorandfoundation/algokit-utils-ts) v10 (no algosdk dependency) and the [`mppx`](https://www.npmjs.com/package/mppx) protocol library.
 
@@ -125,11 +124,6 @@ algorand.charge({
   // Fee sponsorship
   signer: feePayerSigner,
   signerAddress: 'FEE_PAYER_ADDRESS',
-  // Payment splits
-  splits: [
-    { recipient: 'PLATFORM_ADDRESS', amount: '8500', memo: 'platform fee (5%)' },
-    { recipient: 'REFERRER_ADDRESS', amount: '3400', memo: 'referral (2%)' },
-  ],
 })
 ```
 
@@ -205,7 +199,7 @@ pnpm demo:start         # Start production server
 |--------|------|------|-------------|
 | GET | `/api/v1/weather/:city` | 0.01 ALGO | Weather data (native ALGO payment) |
 | GET | `/api/v1/marketplace/products` | Free | List marketplace products |
-| GET | `/api/v1/marketplace/buy/:id` | 0.10-0.17 USDC | Purchase with splits (USDC payment) |
+| GET | `/api/v1/marketplace/buy/:id` | 0.10-0.17 USDC | Marketplace purchase (USDC payment) |
 | GET | `/api/v1/health` | Free | Server status and configuration |
 
 ### Getting TestNet Funds

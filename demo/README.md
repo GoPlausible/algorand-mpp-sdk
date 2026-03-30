@@ -9,10 +9,9 @@ It demonstrates:
 
 - **Native ALGO payments** — Weather API charges 0.01 ALGO per request
 - **USDC (ASA) payments** — Marketplace charges USDC for purchases
-- **Payment splits** — Marketplace splits payments between seller, platform (5%), and referral (2%)
 - **Fee sponsorship** — Server optionally pays transaction fees on behalf of clients
-- **Pull mode** — Server receives signed transaction group, verifies, simulates, and broadcasts
-- **Push mode** — Client broadcasts transaction and sends TxID for server verification
+- **Server-broadcast mode** — Server receives signed transaction group, verifies, simulates, and broadcasts
+- **Client-broadcast mode** — Client broadcasts transaction and sends TxID for server verification
 
 ## Quick Start
 
@@ -84,7 +83,7 @@ curl http://localhost:3000/api/v1/weather/tokyo
 
 Cost: 0.01 ALGO (10,000 microalgos) per request.
 
-### Marketplace (USDC payments with splits)
+### Marketplace (USDC payments)
 
 ```bash
 # List products (free)
@@ -92,9 +91,6 @@ curl http://localhost:3000/api/v1/marketplace/products
 
 # Buy a product (returns 402 with USDC charge challenge)
 curl http://localhost:3000/api/v1/marketplace/buy/algo-hoodie
-
-# Buy with referral split
-curl "http://localhost:3000/api/v1/marketplace/buy/algo-hoodie?referrer=REFERRER_ADDRESS"
 ```
 
 Products: `algo-hoodie` (0.17 USDC), `validator-mug` (0.15 USDC), `nft-sticker-pack` (0.10 USDC).
@@ -147,7 +143,7 @@ curl http://localhost:3000/api/v1/health
 
 ## Transaction Flow
 
-### Pull Mode (default)
+### Server-Broadcast Mode (default)
 
 1. Client sends `GET /api/v1/weather/tokyo`
 2. Server responds `402 Payment Required` with `WWW-Authenticate: Payment` header containing the charge challenge
@@ -159,12 +155,12 @@ curl http://localhost:3000/api/v1/health
 8. Algorand confirms with instant finality (~3.3s)
 9. Server returns the weather data with `Payment-Receipt` header
 
-### Push Mode (fallback)
+### Client-Broadcast Mode (fallback)
 
 1. Same as above through step 3
 2. Client signs and broadcasts the group to Algorand itself
 3. Client retries with `Authorization: Payment <credential>` containing the TxID
-4. Server fetches the transaction from the indexer, verifies details
+4. Server fetches the transaction from algod/indexer, verifies details
 5. Server returns the weather data with receipt
 
 ## Getting TestNet Funds

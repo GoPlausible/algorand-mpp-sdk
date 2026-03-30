@@ -56,7 +56,7 @@ Cloudflare Worker
 ├── /api/v1/health              → Health check
 ├── /api/v1/weather/:city       → Weather API (0.01 ALGO)
 ├── /api/v1/marketplace/products → List products (free)
-├── /api/v1/marketplace/buy/:id → Purchase (USDC + splits)
+├── /api/v1/marketplace/buy/:id → Purchase (USDC)
 └── /*                          → React SPA (static assets)
 ```
 

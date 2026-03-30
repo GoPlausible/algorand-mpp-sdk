@@ -13,8 +13,7 @@ The full specification is available at: [specs/draft-algorand-charge-00.md](../s
 Algorand supports atomic transaction groups — multiple transactions that execute as a single unit (all succeed or all fail). The spec leverages this for:
 
 - **Fee sponsorship** — A fee payer transaction (index 0) covers fees for the entire group
-- **Payment splits** — Multiple recipients receive funds in the same atomic group
-- **Referral payments** — Additional split transactions route commissions to referrers
+- **Lease-based idempotency** — Protocol-level replay protection bound to each challenge
 
 ### CAIP-2 Network Identification
 
@@ -29,8 +28,8 @@ Networks are identified using [CAIP-2](https://github.com/ChainAgnostic/CAIPs/bl
 
 | Mode | Credential Type | Who Broadcasts | Use Case |
 |------|----------------|----------------|----------|
-| **Pull** | `type="transaction"` | Server | Default. Enables fee sponsorship. Server has full control. |
-| **Push** | `type="txid"` | Client | Fallback when server can't broadcast. No fee sponsorship. |
+| **Server-broadcast** | `type="transaction"` | Server | Default. Enables fee sponsorship. Server has full control. |
+| **Client-broadcast** | `type="txid"` | Client | Fallback when server can't broadcast. No fee sponsorship. |
 
 ### Native ALGO and ASA Support
 
@@ -47,19 +46,19 @@ The server's 402 response includes `methodDetails` specific to Algorand:
   "recipient": "ALGO_ADDRESS...",
   "methodDetails": {
     "network": "algorand:SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=",
-    "reference": "unique-charge-id",
+    "challengeReference": "unique-charge-id",
+    "lease": "base64-encoded-32-byte-value...",
     "asaId": "10458941",
     "decimals": 6,
     "feePayer": true,
     "feePayerKey": "FEE_PAYER_ALGO_ADDRESS...",
-    "splits": [
-      { "recipient": "PLATFORM_ADDRESS...", "amount": "500", "memo": "platform fee" }
-    ],
     "suggestedParams": {
+      "fee": 0,
       "firstValid": 12345678,
       "lastValid": 12346678,
       "genesisHash": "base64...",
-      "genesisId": "testnet-v1.0"
+      "genesisId": "testnet-v1.0",
+      "minFee": 1000
     }
   }
 }
@@ -67,7 +66,7 @@ The server's 402 response includes `methodDetails` specific to Algorand:
 
 ## Credential Structure
 
-### Pull Mode (type="transaction")
+### Server-Broadcast Mode (type="transaction")
 
 ```json
 {
@@ -80,7 +79,7 @@ The server's 402 response includes `methodDetails` specific to Algorand:
 }
 ```
 
-### Push Mode (type="txid")
+### Client-Broadcast Mode (type="txid")
 
 ```json
 {
