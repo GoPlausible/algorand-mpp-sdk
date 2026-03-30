@@ -104,11 +104,10 @@ transaction group on the Algorand blockchain; the server verifies
 the payment and presents the transaction identifier as proof of
 payment.
 
-Two credential types are supported: `type="transaction"` (default),
-where the client sends the signed transaction group to the server
-for broadcast, and `type="txid"` (fallback), where the client
-broadcasts the transaction group itself and presents the confirmed
-transaction identifier for server verification.
+The client sends the signed transaction group to the server
+for broadcast via a `type="transaction"` credential. The
+server verifies, optionally co-signs a fee payer transaction,
+and broadcasts the group to the Algorand network.
 
 --- middle
 
@@ -133,11 +132,7 @@ clients construct a group of transactions that execute atomically
 (all succeed or all fail). This enables fee sponsorship and
 complex payment flows without requiring smart contracts.
 
-## Server-Broadcast Mode (Default) {#server-broadcast-mode}
-
-The default flow uses `type="transaction"` credentials. The
-client signs the transaction group and the server broadcasts
-it to the Algorand network:
+## Charge Flow
 
 ~~~
    Client                     Server              Algorand Network
@@ -169,53 +164,15 @@ it to the Algorand network:
       |                          |                        |
 ~~~
 
-In this model the server controls transaction broadcast, enabling
-fee sponsorship ({{fee-sponsorship}}) and server-side verification
-via simulation before committing to the network. When `feePayer`
-is `true`, the challenge includes `feePayerKey` so the client
-includes a fee payer transaction in the group. The server co-signs
-the fee payer transaction before broadcasting.
-
-## Client-Broadcast Mode (Fallback) {#client-broadcast-mode}
-
-The fallback flow uses `type="txid"` credentials. The client
-broadcasts the transaction group to the network itself and
-presents the confirmed transaction identifier:
-
-~~~
-   Client                     Server              Algorand Network
-      |                          |                        |
-      |  (1) GET /resource       |                        |
-      |----------------------->  |                        |
-      |                          |                        |
-      |  (2) 402 Payment Required|                        |
-      |      (recipient, amount) |                        |
-      |<-----------------------  |                        |
-      |                          |                        |
-      |  (3) Build, sign, send   |                        |
-      |      transaction group   |                        |
-      |----------------------------------------------->   |
-      |  (4) Instant finality    |                        |
-      |<-----------------------------------------------   |
-      |                          |                        |
-      |  (5) Authorization:      |                        |
-      |      Payment <credential>|                        |
-      |      (txid)              |                        |
-      |----------------------->  |                        |
-      |                          |  (6) Lookup txn        |
-      |                          |----------------------> |
-      |                          |  (7) Parsed txn data   |
-      |                          |<---------------------- |
-      |                          |                        |
-      |  (8) 200 OK + Receipt    |                        |
-      |<-----------------------  |                        |
-      |                          |                        |
-~~~
-
-This flow is useful when the client cannot or does not wish to
-delegate broadcast to the server. The server verifies the payment
-by fetching and inspecting the confirmed transaction via an
-Algorand node or indexer.
+The server controls transaction broadcast, enabling optional
+fee sponsorship ({{fee-sponsorship}}) and server-side
+verification via simulation before committing to the network.
+When `feePayer` is `true`, the challenge includes
+`feePayerKey` so the client includes a fee payer transaction
+in the group. The server co-signs the fee payer transaction
+before broadcasting. When `feePayer` is `false` or omitted,
+the client fully signs the group and the server broadcasts
+it as-is.
 
 ## Relationship to the Charge Intent
 
@@ -281,18 +238,6 @@ Asset Opt-In
   receiving a particular ASA. An asset transfer to an account
   that has not opted in to the asset will be rejected.
 
-Server-Broadcast Mode
-: The default settlement flow where the client signs the
-  transaction group and the server broadcasts it
-  (`type="transaction"`). Enables fee sponsorship and
-  server-side simulation.
-
-Client-Broadcast Mode
-: The fallback settlement flow where the client broadcasts
-  the transaction group itself and presents the confirmed
-  transaction identifier (`type="txid"`). The client
-  submits the group to the network directly.
-
 CAIP-2
 : Chain Agnostic Improvement Proposal 2, a standard for
   identifying blockchain networks. Algorand networks are
@@ -329,11 +274,10 @@ It MUST be lowercase.
 
 The "charge" intent represents a one-time payment gating access
 to a resource. The client builds and signs an Algorand transaction
-group containing the transfer, then either sends the signed group
-to the server for broadcast (`type="transaction"`) or broadcasts
-the group itself and sends the confirmed transaction identifier
-(`type="txid"`). The server verifies the transfer details and
-returns a receipt.
+group containing the transfer and sends the signed group to the
+server for broadcast. The server verifies the transfer details,
+broadcasts the group to the Algorand network, and returns a
+receipt upon confirmation.
 
 # Encoding Conventions {#encoding}
 
@@ -614,13 +558,12 @@ source
 
 payload
 : REQUIRED. A JSON object containing the Algorand-specific
-  credential fields. The `type` field determines which
-  additional fields are present. Two payload types are
-  defined: `"transaction"` (default) and `"txid"` (fallback).
+  credential fields. The `type` field MUST be
+  `"transaction"`.
 
-## Transaction Payload -- Server-Broadcast Mode {#transaction-payload}
+## Transaction Payload {#transaction-payload}
 
-In server-broadcast mode (`type="transaction"`), the client sends the
+The client sends the
 signed transaction group to the server for broadcast. The
 payload contains the group as an array of base64-encoded
 msgpack-serialized transactions.
@@ -664,53 +607,6 @@ Example (decoded):
   }
 }
 ~~~
-
-## TxID Payload -- Client-Broadcast Mode {#txid-payload}
-
-In client-broadcast mode (`type="txid"`), the client has already broadcast
-the transaction group to the Algorand network. The `txid` field
-contains the transaction identifier of the payment transaction
-(i.e., the transaction at `paymentIndex` in the group) for the
-server to verify on-chain.
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `type` | string | REQUIRED | `"txid"` |
-| `txid` | string | REQUIRED | 52-character base32 Algorand transaction identifier |
-
-Example (decoded):
-
-~~~json
-{
-  "challenge": {
-    "id": "kM9xPqWvT2nJrHsY4aDfEb",
-    "realm": "api.example.com",
-    "method": "algorand",
-    "intent": "charge",
-    "request": "eyJ...",
-    "expires": "2026-03-15T12:05:00Z"
-  },
-  "payload": {
-    "type": "txid",
-    "txid": "NTRZR6HGMMZGYMJKUNVNLKLA427ACAVIPFNC6J\
-HA5XNBQQHW7MWA"
-  }
-}
-~~~
-
-## Limitations of Client-Broadcast Mode {#txid-limitations}
-
-The `type="txid"` credential has the following limitations:
-
-- MUST NOT be used when `feePayer` is `true` in the challenge
-  request. Since the client has already broadcast the
-  transaction group, the server cannot add its fee payer
-  signature. Servers MUST reject `type="txid"` credentials
-  when the challenge specifies `feePayer: true`.
-
-- The server cannot modify or enhance the transaction group
-  (e.g., adjust fees, add transactions, or retry with
-  different parameters).
 
 # Fee Sponsorship {#fee-sponsorship}
 
@@ -832,8 +728,7 @@ When acting as fee payer, servers:
   MUST use `type="transaction"` credentials.
 - When `feePayer` is `false` or omitted: clients MUST set
   appropriate fees on their own transactions and fully sign
-  all transactions. Clients MAY use either
-  `type="transaction"` or `type="txid"` credentials.
+  all transactions.
 
 # Verification Procedure {#verification}
 
@@ -841,8 +736,7 @@ Upon receiving a request with a credential, the server MUST:
 
 1. Decode the base64url credential and parse the JSON.
 
-2. Verify that `payload.type` is present and is either
-   `"transaction"` or `"txid"`.
+2. Verify that `payload.type` is `"transaction"`.
 
 3. Look up the stored challenge using
    `credential.challenge.id`. If no matching challenge
@@ -851,17 +745,7 @@ Upon receiving a request with a credential, the server MUST:
 4. Verify that all fields in `credential.challenge`
    exactly match the stored challenge auth-params.
 
-5. If `payload.type` is `"txid"` and the challenge
-   specifies `feePayer: true`, reject the request (see
-   {{txid-limitations}}).
-
-6. Proceed with type-specific verification:
-   - For `type="transaction"`: see {{transaction-verification}}.
-   - For `type="txid"`: see {{txid-verification}}.
-
-## Server-Broadcast Mode Verification {#transaction-verification}
-
-For credentials with `type="transaction"`:
+## Transaction Verification {#transaction-verification}
 
 1. Verify the `paymentGroup` contains 16 or fewer elements.
 
@@ -950,56 +834,6 @@ servers MUST check:
 
 8. The transaction is unsigned (the server will sign it).
 
-## Client-Broadcast Mode Verification {#txid-verification}
-
-For credentials with `type="txid"`:
-
-1. Verify that `payload.txid` is present and is a valid
-   52-character base32 transaction identifier.
-
-2. Verify the transaction identifier has not been
-   previously consumed (see {{replay-protection}}).
-
-3. Fetch the transaction from the Algorand network.
-   Servers SHOULD first query algod's
-   `v2/transactions/pending/{txid}` endpoint (which
-   reflects the most recent confirmed round) and fall
-   back to the indexer's `v2/transactions/{txid}`
-   endpoint. Note: the indexer may lag behind algod by
-   several rounds; servers MUST NOT reject a credential
-   solely because the indexer has not yet indexed the
-   transaction. Servers SHOULD retry with exponential
-   backoff (up to 10 seconds) before concluding the
-   transaction does not exist.
-
-4. Verify the transaction was successful (confirmed in
-   a block). Algorand provides instant finality: once
-   confirmed, the transaction cannot be reversed.
-
-5. Verify the transfer details match the challenge
-   request:
-
-   - For native ALGO: verify `type` is `pay`, `amt`
-     matches `amount`, `rcv` matches `recipient`.
-   - For ASA: verify `type` is `axfer`, `aamt` matches
-     `amount`, `arcv` matches `recipient`, `xaid`
-     matches `asaId`.
-
-6. Verify that the transaction does not contain `close`,
-   `aclose`, or `rekey` fields.
-
-7. If the challenge included a `lease` value, verify
-   that the payment transaction's `lx` field matches
-   the expected lease.
-
-8. Mark the transaction identifier as consumed to
-   prevent replay.
-
-9. Return the resource with a Payment-Receipt header.
-
-Note: both credential types reuse the same transfer
-verification logic for the payment transaction.
-
 ## Replay Protection {#replay-protection}
 
 This specification provides two layers of replay
@@ -1021,10 +855,8 @@ replay prevention token. A TxID that has been consumed
 MUST NOT be accepted again, even if presented with a
 different challenge ID.
 
-For `type="transaction"` credentials, the TxID is derived
-from the payment transaction after broadcast. For
-`type="txid"` credentials, the TxID is provided directly
-by the client.
+The TxID is derived from the payment transaction after
+broadcast.
 
 Servers MUST retain consumed TxIDs for at least the
 duration of the challenge validity window (the `expires`
@@ -1065,8 +897,7 @@ following states:
    challenge; concurrent submissions for the same
    challenge MUST be serialized.
 3. **broadcast**: The transaction group has been
-   submitted to the Algorand network (server-broadcast
-   mode only).
+   submitted to the Algorand network.
 4. **confirmed**: The transaction is confirmed in a
    block with instant finality.
 5. **fulfilled**: The resource has been served and the
@@ -1081,11 +912,6 @@ in the `fulfilled` state MUST return the cached receipt
 on retry (idempotent success).
 
 # Settlement Procedure
-
-Two settlement flows are supported, corresponding to
-the two credential types.
-
-## Server-Broadcast Settlement (type="transaction")
 
 For `type="transaction"` credentials, the client signs the
 transaction group and sends it to the server. The server
@@ -1129,45 +955,6 @@ optionally adds a fee payer signature and broadcasts:
    (sub-4-second block time, no forks).
 6. Server records the TxID as consumed and returns the
    resource with a Payment-Receipt header.
-
-## Client-Broadcast Settlement (type="txid")
-
-For `type="txid"` credentials, the client broadcasts the
-transaction group itself and presents the confirmed TxID:
-
-~~~
-   Client                     Server              Algorand Network
-      |                          |                        |
-      |  (1) Build & sign group  |                        |
-      |                          |                        |
-      |  (2) Broadcast group     |                        |
-      |----------------------------------------------->   |
-      |                          |                        |
-      |  (3) Instant finality    |                        |
-      |<-----------------------------------------------   |
-      |                          |                        |
-      |  (4) Authorization:      |                        |
-      |      Payment <credential>|                        |
-      |      (txid)              |                        |
-      |----------------------->  |                        |
-      |                          |  (5) Lookup txn        |
-      |                          |----------------------> |
-      |                          |  (6) Verified          |
-      |                          |<---------------------- |
-      |                          |                        |
-      |  (7) 200 OK + Receipt    |                        |
-      |<-----------------------  |                        |
-~~~
-
-1. Client builds a transfer transaction group and signs it.
-2. Client sends the group to the Algorand network.
-3. Transaction is included in a block with instant finality.
-4. Client presents the payment transaction's TxID as the
-   credential.
-5. Server fetches the transaction via algod or indexer and
-   verifies transfer details.
-6. Server confirms the payment matches the challenge.
-7. Server returns the resource with a Payment-Receipt.
 
 ## Client Transaction Construction
 
@@ -1313,12 +1100,6 @@ https://paymentauth.org/problems/algorand/unknown-challenge
   challenge has already been consumed. A fresh challenge
   MUST be included in `WWW-Authenticate`.
 
-https://paymentauth.org/problems/algorand/invalid-credential-type
-: HTTP 402. The `payload.type` is `"txid"` but the
-  challenge specifies `feePayer: true`, which requires
-  `type="transaction"`. A fresh challenge MUST be included
-  in `WWW-Authenticate`.
-
 https://paymentauth.org/problems/algorand/group-invalid
 : HTTP 402. The transaction group structure is invalid:
   too many transactions (exceeds 16), mismatched Group IDs,
@@ -1355,11 +1136,6 @@ https://paymentauth.org/problems/algorand/broadcast-failed
   rejected it (e.g., invalid signature, insufficient
   funds, expired round range). A fresh challenge MUST be
   included in `WWW-Authenticate`.
-
-https://paymentauth.org/problems/algorand/txid-consumed
-: HTTP 402. The transaction identifier has already been
-  used to fulfill a previous challenge. A fresh challenge
-  MUST be included in `WWW-Authenticate`.
 
 Example error response body:
 
@@ -1448,21 +1224,6 @@ transaction data, causing the server to accept payments
 that were never made. Servers SHOULD use trusted node
 providers or run their own nodes.
 
-## Front-running (Client-Broadcast Mode)
-
-In client-broadcast mode, the client broadcasts the transaction group
-before presenting the credential, making it visible
-on-chain. A party monitoring the chain could attempt to
-present the same TxID to the server. The challenge
-binding (the credential echoes the challenge `id`, which
-is verified by the server) and single-use TxID
-enforcement mitigate this: only the party that received
-the challenge can construct a valid credential.
-
-Server-broadcast mode is not susceptible to front-running because
-the transaction is not broadcast until the server
-receives and validates the credential.
-
 ## Fee Payer Risks {#fee-payer-risks}
 
 Servers acting as fee payers accept financial risk in
@@ -1478,7 +1239,7 @@ Denial of Service via Bad Transactions
   - **Transaction simulation**: The `simulate` endpoint
     catches most failures before broadcast, without
     spending fees. Servers SHOULD simulate all
-    server-broadcast mode groups before broadcasting.
+    transaction groups before broadcasting.
   - **Rate limiting**: per client address, per IP, or
     per time window.
   - **Balance verification**: check the client's balance
@@ -1514,7 +1275,7 @@ not opted in.
 
 ## Transaction Group Security
 
-In server-broadcast mode, the server receives a complete transaction
+The server receives a complete transaction
 group from the client. A malicious client could include
 unexpected transactions in the group. Servers MUST verify
 that the group contains only expected transactions:
@@ -1531,7 +1292,7 @@ provides `suggestedParams` in the challenge, clients
 SHOULD verify the round range is plausible. A malicious
 server could provide an expired round range, causing the
 client to sign a transaction that will never be accepted.
-In server-broadcast mode, the practical risk is limited to a failed
+The practical risk is limited to a failed
 payment attempt that the client can retry.
 
 ## Rekeyed Account Authorization {#rekeyed-accounts}
@@ -1606,7 +1367,7 @@ The following examples illustrate the complete HTTP exchange
 for each flow. Base64url values are shown with their decoded
 JSON below.
 
-## Native ALGO Charge (Server-Broadcast Mode)
+## Native ALGO Charge
 
 A 10 ALGO charge for weather API access.
 
@@ -1815,25 +1576,6 @@ The fee payer transaction at index 0 carries `fee: 2000`
 Algorand's fee pooling. The payment transaction at
 index 1 has `fee: 0` (omitted in msgpack) and includes
 the `lx` (lease) field binding it to the challenge.
-
-## Client-Broadcast Mode (type="txid")
-
-The client broadcasts the transaction group itself and
-presents the confirmed TxID. Cannot be used with fee
-sponsorship.
-
-Decoded credential:
-
-~~~json
-{
-  "challenge": { "...": "echoed challenge" },
-  "payload": {
-    "type": "txid",
-    "txid": "NTRZR6HGMMZGYMJKUNVNLKLA427ACAVIPFNC6J\
-HA5XNBQQHW7MWA"
-  }
-}
-~~~
 
 # Signature Schemes
 
