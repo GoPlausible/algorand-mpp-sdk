@@ -134,8 +134,13 @@ export function buildFeePayerTransaction(params: {
  *
  * Transaction group structure: [optional fee payer] + [payment].
  *
- * Fee calculation per spec:
+ * Fee calculation follows the Algorand fee protocol:
  *   required_fee = max(fee_per_byte * txn_size_in_bytes, min_fee)
+ *
+ * The implementation uses a two-pass approach (matching x402-avm):
+ *   1. Build all transactions with placeholder fees, assign group IDs
+ *   2. Measure actual encoded sizes (including grp field), compute
+ *      exact fees using the formula, reconstruct with correct fees
  *
  * When fee payer is present, the fee payer transaction carries the
  * pooled fee for the entire group; client transactions have fee=0.
@@ -172,71 +177,105 @@ export function buildChargeGroup(params: {
     : `mppx:${challengeReference}`;
   const note = textEncoder.encode(noteStr);
 
-  // Step 1: Build the payment transaction with a placeholder fee (0).
-  // We need its serialized size to compute the actual required fee.
-  const paymentTxn = buildPaymentTransaction({
-    sender,
-    receiver,
-    amount,
-    asaId,
-    fee: 0n,
-    lease,
-    note,
-    suggestedParams,
-  });
+  // ── Pass 1: Build transactions with placeholder fees, assign group IDs ──
 
-  // Step 2: Compute the required fee for the payment transaction.
-  const paymentBytes = encodeTransactionRaw(paymentTxn);
-  const paymentRequiredFee = computeRequiredFee(
-    suggestedParams.fee,
-    BigInt(paymentBytes.length),
-    suggestedParams.minFee,
-  );
+  const rawTransactions: Transaction[] = [];
+  let paymentIndex: number;
 
   if (useServerFeePayer && feePayerKey) {
-    // Fee payer mode: client pays 0, fee payer covers everything.
-    // Build a temporary fee payer to measure its size.
-    const tempFeePayer = buildFeePayerTransaction({
-      feePayerKey,
-      pooledFee: 0n,
-      suggestedParams,
-    });
-    const feePayerBytes = encodeTransactionRaw(tempFeePayer);
-    const feePayerRequiredFee = computeRequiredFee(
-      suggestedParams.fee,
-      BigInt(feePayerBytes.length),
-      suggestedParams.minFee,
+    // Fee payer at index 0 with placeholder fee.
+    rawTransactions.push(
+      buildFeePayerTransaction({
+        feePayerKey,
+        pooledFee: 0n,
+        suggestedParams,
+      }),
     );
-
-    // Pooled fee = sum of all required fees in the group.
-    const pooledFee = feePayerRequiredFee + paymentRequiredFee;
-
-    // Rebuild fee payer with the correct pooled fee.
-    const feePayerTxn = buildFeePayerTransaction({
-      feePayerKey,
-      pooledFee,
-      suggestedParams,
-    });
-
-    // Payment stays at fee=0.
-    const transactions = groupTransactions([feePayerTxn, paymentTxn]);
-    return { paymentIndex: 1, transactions };
+    // Payment at index 1 with fee=0 (fee payer covers it).
+    paymentIndex = 1;
+    rawTransactions.push(
+      buildPaymentTransaction({
+        sender,
+        receiver,
+        amount,
+        asaId,
+        fee: 0n,
+        lease,
+        note,
+        suggestedParams,
+      }),
+    );
+  } else {
+    // Single payment with placeholder fee.
+    paymentIndex = 0;
+    rawTransactions.push(
+      buildPaymentTransaction({
+        sender,
+        receiver,
+        amount,
+        asaId,
+        fee: 0n,
+        lease,
+        note,
+        suggestedParams,
+      }),
+    );
   }
 
-  // Client-paid: set the payment's fee to its required fee.
-  const paymentWithFee = buildPaymentTransaction({
-    sender,
-    receiver,
-    amount,
-    asaId,
-    fee: paymentRequiredFee,
-    lease,
-    note,
-    suggestedParams,
-  });
+  // Assign group IDs — this sets the `grp` field on all transactions.
+  const grouped = groupTransactions(rawTransactions);
 
-  const transactions = groupTransactions([paymentWithFee]);
-  return { paymentIndex: 0, transactions };
+  // ── Pass 2: Measure actual encoded sizes, compute exact fees ──
+
+  // Compute required fee for each transaction from its actual encoded size.
+  let totalGroupFee = 0n;
+  for (const txn of grouped) {
+    const txnSize = BigInt(encodeTransactionRaw(txn).length);
+    totalGroupFee += computeRequiredFee(
+      suggestedParams.fee,
+      txnSize,
+      suggestedParams.minFee,
+    );
+  }
+
+  if (useServerFeePayer && feePayerKey) {
+    // Reconstruct fee payer with the exact pooled fee.
+    grouped[0] = new Transaction({
+      ...extractTransactionFields(grouped[0]),
+      fee: totalGroupFee,
+    });
+    // Payment stays at fee=0 (already set).
+  } else {
+    // Reconstruct payment with its required fee.
+    grouped[paymentIndex] = new Transaction({
+      ...extractTransactionFields(grouped[paymentIndex]),
+      fee: totalGroupFee,
+    });
+  }
+
+  return { paymentIndex, transactions: grouped };
+}
+
+/**
+ * Extract all fields from a Transaction for reconstruction.
+ * Preserves group ID, genesis hash, and all other fields.
+ */
+function extractTransactionFields(txn: Transaction): ConstructorParameters<typeof Transaction>[0] {
+  return {
+    type: txn.type,
+    sender: txn.sender,
+    fee: txn.fee,
+    firstValid: txn.firstValid,
+    lastValid: txn.lastValid,
+    genesisHash: txn.genesisHash,
+    genesisId: txn.genesisId,
+    group: txn.group,
+    lease: txn.lease,
+    note: txn.note,
+    rekeyTo: txn.rekeyTo,
+    ...(txn.payment ? { payment: txn.payment } : {}),
+    ...(txn.assetTransfer ? { assetTransfer: txn.assetTransfer } : {}),
+  };
 }
 
 /**
