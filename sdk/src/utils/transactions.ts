@@ -238,29 +238,31 @@ export function buildChargeGroup(params: {
     );
   }
 
-  if (useServerFeePayer && feePayerKey) {
-    // Reconstruct fee payer with the exact pooled fee.
-    grouped[0] = new Transaction({
-      ...extractTransactionFields(grouped[0]),
-      fee: totalGroupFee,
-    });
-    // Payment stays at fee=0 (already set).
-  } else {
-    // Reconstruct payment with its required fee.
-    grouped[paymentIndex] = new Transaction({
-      ...extractTransactionFields(grouped[paymentIndex]),
-      fee: totalGroupFee,
-    });
-  }
+  // Reconstruct transactions with correct fees (strip old group ID).
+  const corrected: Transaction[] = grouped.map((txn, i) => {
+    const fields = extractTransactionFields(txn);
+    // Remove stale group ID — will be reassigned below.
+    delete fields.group;
 
-  return { paymentIndex, transactions: grouped };
+    if (useServerFeePayer && feePayerKey) {
+      // Fee payer (index 0) carries the total pooled fee.
+      // Payment (index 1) stays at fee=0.
+      return new Transaction({ ...fields, fee: i === 0 ? totalGroupFee : 0n });
+    }
+    // Client-paid: the single payment carries the total fee.
+    return new Transaction({ ...fields, fee: totalGroupFee });
+  });
+
+  // Re-assign group IDs from the corrected transaction hashes.
+  const final = groupTransactions(corrected);
+  return { paymentIndex, transactions: final };
 }
 
 /**
  * Extract all fields from a Transaction for reconstruction.
  * Preserves group ID, genesis hash, and all other fields.
  */
-function extractTransactionFields(txn: Transaction): ConstructorParameters<typeof Transaction>[0] {
+function extractTransactionFields(txn: Transaction): ConstructorParameters<typeof Transaction>[0] & { group?: Uint8Array } {
   return {
     type: txn.type,
     sender: txn.sender,
