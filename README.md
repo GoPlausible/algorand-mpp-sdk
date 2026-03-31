@@ -213,7 +213,7 @@ pnpm demo:start         # Start production server
 algorand-mpp-sdk/
 ├── sdk/src/                # SDK source code
 │   ├── client/             # Client-side charge (browser/Node)
-│   ├── server/             # Server-side charge (verify, co-sign, broadcast)
+│   ├── server/             # Server-side charge (verify, sign, broadcast)
 │   ├── utils/              # Transaction building and encoding
 │   ├── Methods.ts          # Shared charge method schema
 │   └── constants.ts        # Network IDs, algod URLs

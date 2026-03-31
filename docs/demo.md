@@ -46,7 +46,7 @@ A React + Vite single-page application that:
 
 - Fee payer transaction at index 0 covers all fees via fee pooling
 - Client's transactions have zero fee
-- Server co-signs the fee payer transaction after verification
+- Server signs the fee payer transaction after verification
 - Configurable via `FEE_PAYER_KEY` environment variable
 
 ### 5. NFDomains Integration
@@ -59,7 +59,7 @@ A React + Vite single-page application that:
 ### 6. Server-Broadcast Settlement
 
 - Client signs transactions and sends the group to the server
-- Server verifies, co-signs fee payer, simulates, and broadcasts
+- Server verifies, signs fee payer, simulates, and broadcasts
 - Server has full control over when and whether to broadcast
 
 ### 7. Product Listing (Free Endpoint)

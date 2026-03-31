@@ -111,7 +111,7 @@ curl http://localhost:3000/api/v1/health
 3. Client builds an atomic transaction group (fee payer txn + payment txn)
 4. Client signs its payment transaction(s), leaves fee payer unsigned
 5. Client retries the request with `Authorization: Payment <credential>` containing the signed group
-6. Server verifies the group, co-signs the fee payer transaction
+6. Server verifies the group, signs the fee payer transaction
 7. Server simulates the group, broadcasts to Algorand TestNet
 8. Algorand confirms with instant finality (~3.3s)
 9. Server returns the weather data with `Payment-Receipt` header

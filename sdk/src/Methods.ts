@@ -4,8 +4,8 @@ import { Method, z } from "mppx";
  * Algorand charge method — shared schema used by both server and client.
  *
  * The client signs the transaction group and sends the serialized bytes
- * to the server. The server verifies, optionally co-signs a fee payer
- * transaction, and broadcasts it to the Algorand network.
+ * to the server. The server verifies, optionally signs the fee payer
+ * transaction, and broadcasts the group to the Algorand network.
  */
 export const charge = Method.from({
   intent: "charge",

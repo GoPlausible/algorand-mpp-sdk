@@ -17,7 +17,7 @@ import {
 import * as Methods from "../Methods.js";
 import {
   base64ToUint8Array,
-  coSignBase64Transaction,
+  signBase64Transaction,
   computeRequiredFee,
 } from "../utils/transactions.js";
 
@@ -68,7 +68,7 @@ const feePayerInvalid = (detail: string) =>
  * Creates an Algorand `charge` method for usage on the server.
  *
  * The server receives a signed transaction group from the client,
- * optionally co-signs the fee payer transaction, simulates,
+ * optionally signs the fee payer transaction, simulates,
  * broadcasts, and verifies on-chain.
  *
  * @example
@@ -282,7 +282,7 @@ async function verifyTransaction(
     verifyLease(paymentTxn, challenge.methodDetails.lease);
   }
 
-  // Step 7: Fee payer verification and co-signing.
+  // Step 7: Fee payer verification and signing.
   let finalGroup = [...paymentGroup];
   if (challenge.methodDetails.feePayer && signer && signerAddress) {
     const feePayerIndex = findFeePayerIndex(transactions, signerAddress);
@@ -331,8 +331,8 @@ async function verifyTransaction(
       }
     }
 
-    // Co-sign the fee payer transaction.
-    const signedFeePayerB64 = await coSignBase64Transaction(
+    // Sign the fee payer transaction.
+    const signedFeePayerB64 = await signBase64Transaction(
       signer,
       paymentGroup[feePayerIndex],
       transactions,
@@ -683,7 +683,7 @@ export declare namespace charge {
     /**
      * Server-side signer for fee sponsorship (feePayer mode).
      * When provided, the server's address is included in the challenge
-     * as `feePayerKey`, and the server co-signs the fee payer transaction
+     * as `feePayerKey`, and the server signs the fee payer transaction
      * before broadcasting.
      */
     signer?: TransactionSigner;

@@ -26,7 +26,7 @@ Networks are identified using [CAIP-2](https://github.com/ChainAgnostic/CAIPs/bl
 
 ### Settlement
 
-The client signs the transaction group and sends it to the server as a `type="transaction"` credential. The server verifies, optionally co-signs the fee payer, and broadcasts to the Algorand network.
+The client signs the transaction group and sends it to the server as a `type="transaction"` credential. The server verifies, optionally signs the fee payer, and broadcasts to the Algorand network.
 
 ### Native ALGO and ASA Support
 

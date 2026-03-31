@@ -3,7 +3,6 @@ import {
   Transaction,
   TransactionType,
   groupTransactions,
-  encodeSignedTransaction,
   encodeTransactionRaw,
   decodeSignedTransaction,
   decodeTransaction,
@@ -341,12 +340,12 @@ export function isSigned(
 }
 
 /**
- * Co-sign a base64-encoded unsigned transaction with the given signer.
+ * Sign a base64-encoded unsigned transaction with the given signer.
  * Returns the signed transaction as base64.
  */
-export async function coSignBase64Transaction(
+export async function signBase64Transaction(
   signer: TransactionSigner,
-  base64Txn: string,
+  _base64Txn: string,
   transactions: Transaction[],
   indexToSign: number,
 ): Promise<string> {

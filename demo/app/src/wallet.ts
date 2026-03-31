@@ -6,7 +6,7 @@ type Signer = (txns: Uint8Array[], indexesToSign?: number[]) => Promise<(Uint8Ar
 
 // Wrap use-wallet's signTransactions.
 // For null entries (fee payer txns the wallet can't sign), return the
-// original encoded unsigned bytes so the server can co-sign them.
+// original encoded unsigned bytes so the server can sign them.
 type UseWalletSignTransactions = (txnGroup: Uint8Array[], indexesToSign?: number[]) => Promise<(Uint8Array | null)[]>
 
 export function createSigner(signTransactions: UseWalletSignTransactions): Signer {

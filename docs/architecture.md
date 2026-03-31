@@ -14,7 +14,7 @@
 │   │   └── Methods.ts        # algorand.charge() client factory
 │   ├── server/
 │   │   ├── index.ts          # Server exports: charge, algorand, Mppx, Store
-│   │   ├── Charge.ts         # Server-side charge implementation (verify, co-sign, broadcast)
+│   │   ├── Charge.ts         # Server-side charge implementation (verify, sign, broadcast)
 │   │   └── Methods.ts        # algorand.charge() server factory
 │   └── utils/
 │       └── transactions.ts   # Transaction building, signing, encoding utilities
@@ -87,7 +87,7 @@ algorand.charge() server factory
       ├── Verify lease matches expected value
       ├── Check for dangerous fields (rekey, close-to)
       ├── Verify fee payer (pooled fee via formula)
-      ├── Co-sign fee payer transaction (if applicable)
+      ├── Sign fee payer transaction (if applicable)
       ├── Simulate transaction group
       └── Broadcast to Algorand network
 ```
