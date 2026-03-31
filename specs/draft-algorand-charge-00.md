@@ -153,7 +153,7 @@ complex payment flows without requiring smart contracts.
       |      (signed txn group)  |                        |
       |----------------------->  |                        |
       |                          |  (5) Sign fee payer    |
-      |                          |      txn + simulate    |
+      |                          |      txn (if present)  |
       |                          |  (6) Broadcast group   |
       |                          |----------------------> |
       |                          |  (7) Instant finality  |
@@ -166,7 +166,7 @@ complex payment flows without requiring smart contracts.
 
 The server controls transaction broadcast, enabling optional
 fee sponsorship ({{fee-sponsorship}}) and server-side
-verification via simulation before committing to the network.
+verification before committing to the network.
 When `feePayer` is `true`, the challenge includes
 `feePayerKey` so the client includes a fee payer transaction
 in the group. The server signs the fee payer transaction before
@@ -781,26 +781,20 @@ Upon receiving a request with a credential, the server MUST:
 7. If `feePayer` is `true`, verify the fee payer
    transaction (see {{fee-payer-verification}}).
 
-8. Simulate the transaction group against an Algorand
-   node's `v2/transactions/simulate` endpoint to ensure
-   the transactions would succeed. If simulation fails,
-   reject the credential. This catches invalid
-   transactions without spending fees.
+8. If `feePayer` is `true`, sign the fee payer
+   transaction with the server's fee payer key.
 
-9.  If `feePayer` is `true`, sign the fee payer
-    transaction with the server's fee payer key.
-
-10. Broadcast the fully signed group to the Algorand
+9.  Broadcast the fully signed group to the Algorand
     network via the `v2/transactions` endpoint.
 
-11. Algorand provides instant finality: once the
+10. Algorand provides instant finality: once the
     transaction is included in a block, it is final.
     No additional confirmation is needed.
 
-12. Record the payment transaction's TxID as consumed
+11. Record the payment transaction's TxID as consumed
     to prevent replay (see {{replay-protection}}).
 
-13. Return the resource with a Payment-Receipt header.
+12. Return the resource with a Payment-Receipt header.
 
 ### Fee Payer Transaction Verification {#fee-payer-verification}
 
@@ -902,8 +896,8 @@ following states:
    block with instant finality.
 5. **fulfilled**: The resource has been served and the
    receipt returned. Terminal success state.
-6. **failed**: The transaction failed (simulation
-   failure, broadcast rejection, or on-chain failure).
+6. **failed**: The transaction failed (broadcast
+   rejection or on-chain failure).
    The server issues a fresh challenge.
 
 Transitions MUST be atomic. A challenge in the `claimed`
@@ -927,20 +921,15 @@ optionally adds a fee payer signature and broadcasts:
       |----------------------->|                          |
       |                        |                          |
       |                        |  (2) If feePayer: true,  |
-      |                        |      verify & sign     |
-      |                        |      fee payer txn     |
+      |                        |      verify & sign      |
+      |                        |      fee payer txn      |
       |                        |                          |
-      |                        |  (3) Simulate group      |
+      |                        |  (3) Broadcast group     |
       |                        |----------------------->  |
-      |                        |  (4) Simulation OK       |
+      |                        |  (4) Instant finality    |
       |                        |<-----------------------  |
       |                        |                          |
-      |                        |  (5) Broadcast group     |
-      |                        |----------------------->  |
-      |                        |  (6) Instant finality    |
-      |                        |<-----------------------  |
-      |                        |                          |
-      |  (7) 200 OK + Receipt  |                          |
+      |  (5) 200 OK + Receipt  |                          |
       |<-----------------------|                          |
       |                        |                          |
 ~~~
@@ -949,12 +938,10 @@ optionally adds a fee payer signature and broadcasts:
    group.
 2. If `feePayer` is `true`, the server verifies the fee
    payer transaction and signs it with its fee payer key.
-3. Server simulates the group to catch failures without
-   spending fees.
-4. Server broadcasts the group to Algorand.
-5. Transaction is included in a block with instant finality
+3. Server broadcasts the group to Algorand.
+4. Transaction is included in a block with instant finality
    (sub-4-second block time, no forks).
-6. Server records the TxID as consumed and returns the
+5. Server records the TxID as consumed and returns the
    resource with a Payment-Receipt header.
 
 ## Client Transaction Construction
@@ -1131,8 +1118,8 @@ https://paymentauth.org/problems/algorand/transaction-not-found
   in `WWW-Authenticate`.
 
 https://paymentauth.org/problems/algorand/transaction-failed
-: HTTP 402. The transaction group failed simulation or
-  was rejected by the network. A fresh challenge MUST be
+: HTTP 402. The transaction group was rejected by the
+  network or failed to confirm. A fresh challenge MUST be
   included in `WWW-Authenticate`.
 
 https://paymentauth.org/problems/algorand/broadcast-failed
@@ -1241,10 +1228,6 @@ Denial of Service via Bad Transactions
   `minFee` per transaction in the group) without receiving
   payment. Mitigations:
 
-  - **Transaction simulation**: The `simulate` endpoint
-    catches most failures before broadcast, without
-    spending fees. Servers SHOULD simulate all
-    transaction groups before broadcasting.
   - **Rate limiting**: per client address, per IP, or
     per time window.
   - **Balance verification**: check the client's balance

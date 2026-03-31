@@ -83,4 +83,4 @@ The server's 402 response includes `methodDetails` specific to Algorand:
 - The server verifies transaction amounts, recipients, and group structure before broadcasting
 - Fee payer transactions are validated (zero amount, self-payment, correct fee pooling)
 - Dangerous transaction fields (rekey, close-to) are rejected
-- Transaction groups are simulated before broadcast to catch errors early
+- Transaction groups are verified before broadcast

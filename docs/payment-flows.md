@@ -2,7 +2,7 @@
 
 ## Server-Broadcast
 
-The client signs the transaction group and sends it to the server. The server signs (if fee sponsorship is enabled), simulates, and broadcasts.
+The client signs the transaction group and sends it to the server. The server signs the fee payer (if fee sponsorship is enabled) and broadcasts.
 
 ```
 Client                              Server                          Algorand
@@ -30,8 +30,7 @@ Client                              Server                          Algorand
   |                                   |  Verify group structure        |
   |                                   |  Verify payment details        |
   |                                   |  Verify lease                  |
-  |                                   |  Sign fee payer txn         |
-  |                                   |  Simulate group                |
+  |                                   |  Sign fee payer txn            |
   |                                   |                               |
   |                                   |  Broadcast signed group        |
   |                                   |------------------------------>|
@@ -105,6 +104,5 @@ When the server receives the payment credential, it performs these checks:
 4. **Verify lease** — Payment transaction's `lx` field matches the expected lease
 5. **Check dangerous fields** — Reject transactions with `rekeyTo` or `closeRemainderTo`
 6. **Sign fee payer** — If fee sponsorship is enabled, verify and sign the fee payer transaction
-7. **Simulate** — Run the group through algod simulation to catch errors
-8. **Broadcast** — Submit to the Algorand network
+7. **Broadcast** — Submit to the Algorand network
 9. **Issue receipt** — Return `Payment-Receipt` header with transaction details

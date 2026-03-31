@@ -59,7 +59,7 @@ A React + Vite single-page application that:
 ### 6. Server-Broadcast Settlement
 
 - Client signs transactions and sends the group to the server
-- Server verifies, signs fee payer, simulates, and broadcasts
+- Server verifies, signs fee payer, and broadcasts
 - Server has full control over when and whether to broadcast
 
 ### 7. Product Listing (Free Endpoint)

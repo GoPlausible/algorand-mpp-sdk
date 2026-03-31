@@ -88,7 +88,7 @@ algorand.charge() server factory
       ├── Check for dangerous fields (rekey, close-to)
       ├── Verify fee payer (pooled fee via formula)
       ├── Sign fee payer transaction (if applicable)
-      ├── Simulate transaction group
+      ├── Broadcast transaction group
       └── Broadcast to Algorand network
 ```
 

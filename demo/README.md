@@ -10,7 +10,7 @@ It demonstrates:
 - **Native ALGO payments** — Weather API charges 0.01 ALGO per request
 - **USDC (ASA) payments** — Marketplace charges USDC for purchases
 - **Fee sponsorship** — Server optionally pays transaction fees on behalf of clients
-- **Server-broadcast** — Server receives signed transaction group, verifies, simulates, and broadcasts
+- **Server-broadcast** — Server receives signed transaction group, verifies, and broadcasts
 
 ## Quick Start
 
@@ -112,7 +112,7 @@ curl http://localhost:3000/api/v1/health
 4. Client signs its payment transaction(s), leaves fee payer unsigned
 5. Client retries the request with `Authorization: Payment <credential>` containing the signed group
 6. Server verifies the group, signs the fee payer transaction
-7. Server simulates the group, broadcasts to Algorand TestNet
+7. Server broadcasts the group to Algorand TestNet
 8. Algorand confirms with instant finality (~3.3s)
 9. Server returns the weather data with `Payment-Receipt` header
 

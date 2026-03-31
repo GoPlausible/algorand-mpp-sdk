@@ -52,7 +52,7 @@ const dangerousTransaction = (detail: string) =>
 const transferMismatch = (detail: string) =>
   new AlgorandPaymentError("transfer-mismatch", detail);
 
-/** Transaction group failed simulation or was rejected by network. */
+/** Transaction group was rejected by the network or failed to confirm. */
 const transactionFailed = (detail: string) =>
   new AlgorandPaymentError("transaction-failed", detail);
 
@@ -68,8 +68,8 @@ const feePayerInvalid = (detail: string) =>
  * Creates an Algorand `charge` method for usage on the server.
  *
  * The server receives a signed transaction group from the client,
- * optionally signs the fee payer transaction, simulates,
- * broadcasts, and verifies on-chain.
+ * optionally signs the fee payer transaction, and broadcasts
+ * to the Algorand network.
  *
  * @example
  * ```ts
@@ -341,9 +341,6 @@ async function verifyTransaction(
     finalGroup[feePayerIndex] = signedFeePayerB64;
   }
 
-  // Simulate the transaction group.
-  await simulateGroup(algodUrl, finalGroup);
-
   // Broadcast the transaction group.
   const txid = await broadcastGroup(algodUrl, finalGroup);
 
@@ -536,35 +533,6 @@ function verifyFeePayerTransaction(
 }
 
 // ── Algod RPC helpers ──
-
-async function simulateGroup(
-  algodUrl: string,
-  paymentGroup: string[],
-): Promise<void> {
-  const request = {
-    "txn-groups": [
-      {
-        txns: paymentGroup,
-      },
-    ],
-    "allow-empty-signatures": true,
-  };
-
-  const response = await fetch(`${algodUrl}/v2/transactions/simulate`, {
-    body: JSON.stringify(request),
-    headers: { "Content-Type": "application/json" },
-    method: "POST",
-  });
-
-  const data = (await response.json()) as {
-    "txn-groups"?: Array<{ "failure-message"?: string }>;
-  };
-
-  const failure = data["txn-groups"]?.[0]?.["failure-message"];
-  if (failure) {
-    throw transactionFailed(`Transaction simulation failed: ${failure}`);
-  }
-}
 
 async function broadcastGroup(
   algodUrl: string,
