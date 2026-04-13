@@ -220,6 +220,7 @@ algorand-mpp-sdk/
 ├── demo/
 │   ├── server/             # Express demo server
 │   └── app/                # React + Vite demo frontend
+├── demo-cloudflare/        # Cloudflare Workers demo (single-worker API + SPA)
 ├── docs/                   # Documentation
 ├── specs/                  # Algorand charge specification
 ├── dist/                   # Built SDK output
