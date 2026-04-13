@@ -13,6 +13,10 @@ author:
     ins: M.G
     email: emg110@goplausible.com
     org: GoPlausible
+  - name: Cosimo Bassi
+    ins: C.B
+    email: cosimo.bassi@algorand.foundation
+    org: Algorand Foundation
     
 normative:
   RFC2119:
@@ -1753,5 +1757,5 @@ identifier as an argument to the logic signature program.
 
 # Acknowledgements
 
-The author thanks the Algorand Foundation, Algorand Foundation CTO and engineering team specially Cosimo, Algorand developer community, the GoPlausible team, and the MPP working group for their input
+The author thanks the Algorand Foundation, Algorand Foundation CTO and engineering team, Algorand developer community, the GoPlausible team, and the MPP working group for their input
 on this specification.
