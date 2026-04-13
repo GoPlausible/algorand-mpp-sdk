@@ -2708,7 +2708,7 @@ Payment-Receipt: <base64url receipt with txHash,
 # Acknowledgements
 
 The author thanks the Algorand Foundation, Algorand
-Foundation CTO and engineering team specially Cosimo,
+Foundation CTO and engineering team,
 Algorand developer community, the GoPlausible team, and
 the MPP working group for their input on this
 specification. The passkey integration design draws on
