@@ -39,6 +39,8 @@ Built on [`@algorandfoundation/algokit-utils`](https://github.com/algorandfounda
 | [Payment Flows](docs/payment-flows.md) | Sequence diagrams for all payment modes |
 | [Demo Guide](docs/demo.md) | Demo app features, scenarios, and walkthrough |
 | [Demo README](demo/README.md) | Demo quick start, configuration, and API reference |
+| [Cloudflare Demo Guide](docs/demo-cloudflare.md) | Cloudflare Workers deployment — architecture, config, and differences from the Express demo |
+| [Cloudflare Demo README](demo-cloudflare/README.md) | Cloudflare Workers demo setup, `wrangler.toml`, and deployment |
 | [Full Specification](specs/draft-algorand-charge-00.md) | Complete IETF-style specification |
 
 ## Installation
@@ -191,6 +193,20 @@ pnpm demo:dev           # Runs server (port 3000) + app (port 5173)
 pnpm demo:build         # Build server + app
 pnpm demo:start         # Start production server
 ```
+
+### Cloudflare Workers Demo
+
+An alternative deployment that runs the same endpoints as a single Cloudflare Worker (API + SPA together, no separate server process). Useful for edge deployment or when you want one-command deploys via `wrangler`.
+
+```bash
+pnpm build              # Build the SDK first
+pnpm demo:cf:install    # Install CF demo dependencies
+pnpm demo:cf:dev        # Local dev via wrangler (port 8787)
+pnpm demo:cf:build      # Build SPA + wrangler dry-run
+pnpm demo:cf:deploy     # Deploy to your Cloudflare account
+```
+
+Configure `wrangler.toml` vars and secrets (`MPP_SECRET_KEY`, optional `FEE_PAYER_KEY`) before deploying — see the [Cloudflare Demo Guide](docs/demo-cloudflare.md) for architecture and full setup, or the [in-tree README](demo-cloudflare/README.md) for CLI-level reference.
 
 ### Demo Endpoints
 

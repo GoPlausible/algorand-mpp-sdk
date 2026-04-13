@@ -19,6 +19,8 @@ Built on [`@algorandfoundation/algokit-utils`](https://github.com/algorandfounda
 | [Payment Flows](./payment-flows.md) | Server-broadcast and fee sponsorship |
 | [Demo Guide](./demo.md) | Demo application features, scenarios, and setup |
 | [Demo README](../demo/README.md) | Demo quick start, configuration, and API reference |
+| [Cloudflare Demo Guide](./demo-cloudflare.md) | Cloudflare Workers deployment of the demo |
+| [Cloudflare Demo README](../demo-cloudflare/README.md) | Cloudflare demo quick start, `wrangler.toml`, and deployment |
 | [Full Specification](../specs/draft-algorand-charge-00.md) | Complete Algorand MPP IETF-style specification document |
 
 ---
