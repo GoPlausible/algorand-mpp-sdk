@@ -81,15 +81,18 @@ algorand.charge() server factory
   │   └── Return challenge with methodDetails
   │
   └── verify()
+      ├── Decode credential (challenge echo + payload)
+      ├── Look up stored challenge by challenge.id
       ├── Decode transaction group (signed + unsigned)
-      ├── Verify group ID consistency
+      ├── Verify group ID consistency (≤16 txns, shared grp)
       ├── Verify payment amount, recipient, ASA ID
       ├── Verify lease matches expected value
-      ├── Check for dangerous fields (rekey, close-to)
+      ├── Check for dangerous fields (rekey, close, aclose)
       ├── Verify fee payer (pooled fee via formula)
       ├── Sign fee payer transaction (if applicable)
-      ├── Broadcast transaction group
-      └── Broadcast to Algorand network
+      ├── Broadcast to Algorand network
+      ├── Record TxID as consumed (replay protection)
+      └── Return Payment-Receipt
 ```
 
 ## Client-Side Architecture
@@ -123,13 +126,16 @@ mppx.fetch(url)
   │   ├── Resolve suggested params (from challenge or algod)
   │   ├── Build transaction group
   │   │   ├── Fee payer txn (if server sponsors fees)
-  │   │   └── Payment txn (ALGO or ASA)
+  │   │   └── Payment txn (ALGO or ASA, with lease if provided)
   │   ├── Assign group ID
   │   ├── Encode transactions to raw bytes
   │   ├── Sign via signer (use-wallet / custom)
-  │   └── Serialize credential (paymentGroup + paymentIndex)
+  │   └── Serialize credential
+  │       ├── challenge (echo of WWW-Authenticate auth-params)
+  │       └── payload { type: "transaction", paymentIndex, paymentGroup }
   │
   └── Retry request with Authorization: Payment header
+      (base64url-encoded credential token)
 ```
 
 ## Signer Interface
@@ -159,11 +165,14 @@ export const charge = Method.from({
       amount: z.string(),
       currency: z.string(),
       recipient: z.string(),
+      description: z.optional(z.string()),
+      externalId: z.optional(z.string()),
       methodDetails: z.object({
         network: z.optional(z.string()),
         challengeReference: z.string(),
         lease: z.optional(z.string()),
         asaId: z.optional(z.string()),
+        decimals: z.optional(z.number()),
         feePayer: z.optional(z.boolean()),
         feePayerKey: z.optional(z.string()),
         suggestedParams: z.optional(z.object({ ... })),

@@ -59,9 +59,9 @@ After paying, the client sends a **credential** proving payment:
 The server's 402 response contains a **challenge** with all information needed to construct the payment:
 
 - `amount` — Payment amount in base units
-- `currency` — Token identifier (ALGO, USDC, etc.)
+- `currency` — Display label (ALGO, USDC, etc.) — informational only for ASAs; use `asaId` for identity
 - `recipient` — Receiving Algorand address
-- `methodDetails` — Algorand-specific parameters (network, ASA ID, fee payer, lease, suggested params)
+- `methodDetails` — Algorand-specific parameters: `network`, `challengeReference` (unique per challenge), `asaId`/`decimals` (for ASA payments), `lease` (replay protection), `feePayer`/`feePayerKey` (fee sponsorship), `suggestedParams`
 
 ## MPP vs Traditional Payment APIs
 

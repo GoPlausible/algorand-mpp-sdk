@@ -49,20 +49,20 @@ A React + Vite single-page application that:
 - Server signs the fee payer transaction after verification
 - Configurable via `FEE_PAYER_KEY` environment variable
 
-### 5. NFDomains Integration
+### 4. NFDomains Integration
 
 - Connected wallet displays NFD name (e.g., `alice.algo`) instead of truncated address
 - Wallet modal shows NFD name alongside full address
 - Referrer input accepts NFD names — resolved to deposit address before sending
 - NFD lookups always use mainnet API (NFDs don't exist on testnet)
 
-### 6. Server-Broadcast Settlement
+### 5. Server-Broadcast Settlement
 
 - Client signs transactions and sends the group to the server
 - Server verifies, signs fee payer, and broadcasts
 - Server has full control over when and whether to broadcast
 
-### 7. Product Listing (Free Endpoint)
+### 6. Product Listing (Free Endpoint)
 
 - `/api/v1/marketplace/products` returns available products without payment
 - Demonstrates that not all endpoints require payment
