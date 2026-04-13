@@ -1757,5 +1757,5 @@ identifier as an argument to the logic signature program.
 
 # Acknowledgements
 
-The author thanks the Algorand Foundation, Algorand Foundation CTO and engineering team, Algorand developer community, the GoPlausible team, and the MPP working group for their input
+The author thanks the Algorand Foundation, Algorand Foundation CTO (Bruno Martins) and engineering team, Algorand developer community, the GoPlausible team, and the MPP working group for their input
 on this specification.
