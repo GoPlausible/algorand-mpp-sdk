@@ -50,10 +50,10 @@
     "demo:build": "pnpm demo:server:build && pnpm demo:app:build",
     "demo:start": "cd demo/server && pnpm start",
     "demo:dev": "pnpm demo:server & pnpm demo:app",
-    "demo:cf:install": "cd demo/cloudflare-demo-app && pnpm install",
-    "demo:cf:dev": "cd demo/cloudflare-demo-app && pnpm dev",
-    "demo:cf:build": "cd demo/cloudflare-demo-app && pnpm build",
-    "demo:cf:deploy": "cd demo/cloudflare-demo-app && pnpm run deploy"
+    "demo:cf:install": "cd demo-cloudflare && pnpm install",
+    "demo:cf:dev": "cd demo-cloudflare && pnpm dev",
+    "demo:cf:build": "cd demo-cloudflare && pnpm build",
+    "demo:cf:deploy": "cd demo-cloudflare && pnpm run deploy"
   },
   "dependencies": {
     "@algorandfoundation/algokit-utils": "10.0.0-alpha.39"

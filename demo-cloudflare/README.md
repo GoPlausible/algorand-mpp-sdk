@@ -7,7 +7,7 @@ A single Cloudflare Worker that serves both the API endpoints and the React SPA.
 ```bash
 # From repo root
 pnpm build                                  # Build the SDK
-cd demo/cloudflare-demo-app
+cd demo-cloudflare
 pnpm install                                # Install dependencies
 ```
 
