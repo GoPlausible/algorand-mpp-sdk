@@ -56,7 +56,7 @@
     "demo:cf:deploy": "cd demo-cloudflare && pnpm run deploy"
   },
   "dependencies": {
-    "@algorandfoundation/algokit-utils": "10.0.0-alpha.39"
+    "@algorandfoundation/algokit-utils": "10.0.0-alpha.46"
   },
   "peerDependencies": {
     "mppx": ">=0.4.8"

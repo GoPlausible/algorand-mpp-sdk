@@ -20,7 +20,7 @@
     "cors": "^2.8.5",
     "express": "^5.0.0",
     "@goplausible/algorand-mpp-sdk": "file:../..",
-    "@algorandfoundation/algokit-utils": "10.0.0-alpha.39",
+    "@algorandfoundation/algokit-utils": "10.0.0-alpha.46",
     "mppx": "^0.4.8"
   },
   "devDependencies": {
