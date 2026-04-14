@@ -33,12 +33,7 @@ import {
  * ```
  */
 export function charge(parameters: charge.Parameters) {
-  const {
-    signer,
-    senderAddress,
-    onProgress,
-    encoder,
-  } = parameters;
+  const { signer, senderAddress, onProgress, encoder } = parameters;
 
   const method = Method.toClient(Methods.charge, {
     async createCredential({ challenge }) {

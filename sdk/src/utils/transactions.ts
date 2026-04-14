@@ -262,7 +262,9 @@ export function buildChargeGroup(params: {
  * Extract all fields from a Transaction for reconstruction.
  * Preserves group ID, genesis hash, and all other fields.
  */
-function extractTransactionFields(txn: Transaction): ConstructorParameters<typeof Transaction>[0] & { group?: Uint8Array } {
+function extractTransactionFields(
+  txn: Transaction,
+): ConstructorParameters<typeof Transaction>[0] & { group?: Uint8Array } {
   return {
     type: txn.type,
     sender: txn.sender,

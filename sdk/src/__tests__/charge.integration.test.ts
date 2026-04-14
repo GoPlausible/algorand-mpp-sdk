@@ -17,10 +17,7 @@ import { AlgorandClient } from "@algorandfoundation/algokit-utils";
 import { secretKeyToMnemonic } from "@algorandfoundation/algokit-utils/algo25";
 import type { TransactionSigner } from "@algorandfoundation/algokit-utils/transact";
 import { charge } from "../server/Charge.js";
-import {
-  ALGORAND_TESTNET,
-  DEFAULT_ALGOD_URLS,
-} from "../constants.js";
+import { ALGORAND_TESTNET, DEFAULT_ALGOD_URLS } from "../constants.js";
 import {
   buildChargeGroup,
   signAndEncodeGroup,
@@ -159,50 +156,51 @@ describe("Server: challenge issuance", () => {
     expect(body).toHaveProperty("challengeId");
   });
 
-  it.skipIf(!hasKey)("challenge includes suggestedParams with minFee", async () => {
-    const mppx = createMppx({
-      recipient: recipientAddress,
-      signer: feePayerSigner,
-      signerAddress: feePayerAddress,
-    });
+  it.skipIf(!hasKey)(
+    "challenge includes suggestedParams with minFee",
+    async () => {
+      const mppx = createMppx({
+        recipient: recipientAddress,
+        signer: feePayerSigner,
+        signerAddress: feePayerAddress,
+      });
 
-    const result = await mppx.charge({
-      amount: "10000",
-      currency: "ALGO",
-    })(new Request("https://test.example.com/api/test"));
+      const result = await mppx.charge({
+        amount: "10000",
+        currency: "ALGO",
+      })(new Request("https://test.example.com/api/test"));
 
-    expect(result.status).toBe(402);
-    const challenge = (result as any).challenge as Response;
-    const wwwAuth = challenge.headers.get("www-authenticate")!;
+      expect(result.status).toBe(402);
+      const challenge = (result as any).challenge as Response;
+      const wwwAuth = challenge.headers.get("www-authenticate")!;
 
-    // Decode the request parameter from the WWW-Authenticate header
-    const requestMatch = wwwAuth.match(/request="([^"]+)"/);
-    expect(requestMatch).toBeTruthy();
+      // Decode the request parameter from the WWW-Authenticate header
+      const requestMatch = wwwAuth.match(/request="([^"]+)"/);
+      expect(requestMatch).toBeTruthy();
 
-    const requestData = JSON.parse(
-      Buffer.from(requestMatch![1], "base64url").toString(),
-    ) as { methodDetails?: { suggestedParams?: Record<string, unknown> } };
+      const requestData = JSON.parse(
+        Buffer.from(requestMatch![1], "base64url").toString(),
+      ) as { methodDetails?: { suggestedParams?: Record<string, unknown> } };
 
-    expect(requestData.methodDetails?.suggestedParams).toBeDefined();
-    expect(requestData.methodDetails?.suggestedParams).toHaveProperty(
-      "firstValid",
-    );
-    expect(requestData.methodDetails?.suggestedParams).toHaveProperty(
-      "lastValid",
-    );
-    expect(requestData.methodDetails?.suggestedParams).toHaveProperty(
-      "genesisHash",
-    );
-    expect(requestData.methodDetails?.suggestedParams).toHaveProperty(
-      "genesisId",
-    );
-    expect(requestData.methodDetails?.suggestedParams).toHaveProperty(
-      "minFee",
-    );
-    expect(requestData.methodDetails?.suggestedParams).toHaveProperty(
-      "fee",
-    );
-  });
+      expect(requestData.methodDetails?.suggestedParams).toBeDefined();
+      expect(requestData.methodDetails?.suggestedParams).toHaveProperty(
+        "firstValid",
+      );
+      expect(requestData.methodDetails?.suggestedParams).toHaveProperty(
+        "lastValid",
+      );
+      expect(requestData.methodDetails?.suggestedParams).toHaveProperty(
+        "genesisHash",
+      );
+      expect(requestData.methodDetails?.suggestedParams).toHaveProperty(
+        "genesisId",
+      );
+      expect(requestData.methodDetails?.suggestedParams).toHaveProperty(
+        "minFee",
+      );
+      expect(requestData.methodDetails?.suggestedParams).toHaveProperty("fee");
+    },
+  );
 
   it.skipIf(!hasKey)(
     "challenge includes challengeReference and lease",
@@ -360,7 +358,7 @@ describe("Encoding: transaction roundtrip", () => {
           genesisHash: new Uint8Array(32),
           genesisId: "testnet-v1.0",
           fee: 0n,
-        minFee: 1000n,
+          minFee: 1000n,
         },
       });
 
@@ -398,7 +396,7 @@ describe("End-to-end: full ALGO payment flow (TestNet)", () => {
             recipient: feePayerAddress, // Pay to self for testing
             network: ALGORAND_TESTNET,
             algodUrl: TESTNET_ALGOD,
-                signer: feePayerSigner,
+            signer: feePayerSigner,
             signerAddress: feePayerAddress,
             store,
           }),

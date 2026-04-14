@@ -443,7 +443,9 @@ function verifyLease(txn: Transaction, expectedLeaseB64: string) {
     throw transferMismatch("Payment transaction is missing lease (lx) field");
   }
   if (!arraysEqual(txn.lease, expectedLease)) {
-    throw transferMismatch("Payment transaction lease does not match expected value");
+    throw transferMismatch(
+      "Payment transaction lease does not match expected value",
+    );
   }
 }
 
