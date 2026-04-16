@@ -43,17 +43,17 @@ export const charge = Method.from({
       methodDetails: z.object({
         /** ASA ID of the asset to transfer. If absent, payment is in native ALGO. */
         asaId: z.optional(z.string()),
-        /** Number of decimal places for the ASA (0-19). Required when asaId is present. */
-        decimals: z.optional(z.number()),
         /** If true, server pays transaction fees via fee pooling. */
         feePayer: z.optional(z.boolean()),
         /** Server's Algorand address for fee payment. Present when feePayer is true. */
         feePayerKey: z.optional(z.string()),
         /**
-         * Base64-encoded 32-byte lease value for the payment transaction's `lx` field.
-         * Provides protocol-level idempotency bound to this challenge.
+         * REQUIRED. Base64-encoded 32-byte lease value for the payment transaction's
+         * `lx` field. Derived as SHA-256(challengeReference). Provides TxID uniqueness
+         * across challenges and mutual exclusion between distinct transactions
+         * covering the same charge.
          */
-        lease: z.optional(z.string()),
+        lease: z.string(),
         /** CAIP-2 network identifier (algorand:<genesis-hash>). Defaults to MainNet. */
         network: z.optional(z.string()),
         /**

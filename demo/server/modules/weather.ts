@@ -2,7 +2,7 @@ import type { Express } from 'express'
 import type { TransactionSigner } from '@algorandfoundation/algokit-utils/transact'
 import { Mppx, algorand } from '../sdk.js'
 import { toWebRequest, logPayment } from '../utils.js'
-import { ALGORAND_TESTNET, TESTNET_ALGOD_URL, TESTNET_INDEXER_URL } from '../constants.js'
+import { ALGORAND_TESTNET, TESTNET_ALGOD_URL } from '../constants.js'
 
 // Simple in-memory weather data for the demo (no external API needed).
 const WEATHER: Record<string, { temperature: number; conditions: string; humidity: number }> = {
@@ -29,7 +29,6 @@ export function registerWeather(
       recipient,
       network: ALGORAND_TESTNET,
       algodUrl: TESTNET_ALGOD_URL,
-      indexerUrl: TESTNET_INDEXER_URL,
       // Native ALGO payments (no asaId = ALGO)
       ...(feePayerSigner && feePayerAddress ? {
         signer: feePayerSigner,

@@ -7,7 +7,7 @@ import {
   decodeTransaction,
   encodeTransactionRaw,
 } from "@algorandfoundation/algokit-utils/transact";
-import { Method, Receipt, Store } from "mppx";
+import { Method, Receipt } from "mppx";
 
 import {
   ALGORAND_MAINNET,
@@ -44,10 +44,6 @@ const malformedCredential = (detail: string) =>
 const groupInvalid = (detail: string) =>
   new AlgorandPaymentError("group-invalid", detail);
 
-/** Group contains close, aclose, or rekey fields. */
-const dangerousTransaction = (detail: string) =>
-  new AlgorandPaymentError("dangerous-transaction", detail);
-
 /** On-chain transfer doesn't match challenge. */
 const transferMismatch = (detail: string) =>
   new AlgorandPaymentError("transfer-mismatch", detail);
@@ -60,9 +56,9 @@ const transactionFailed = (detail: string) =>
 const broadcastFailed = (detail: string) =>
   new AlgorandPaymentError("broadcast-failed", detail);
 
-/** Fee payer transaction structure is invalid (maps to group-invalid per spec). */
+/** Fee payer transaction failed verification per spec §fee-payer-verification. */
 const feePayerInvalid = (detail: string) =>
-  new AlgorandPaymentError("group-invalid", detail);
+  new AlgorandPaymentError("fee-payer-invalid", detail);
 
 /**
  * Creates an Algorand `charge` method for usage on the server.
@@ -93,9 +89,7 @@ export function charge(parameters: charge.Parameters) {
   const {
     recipient,
     asaId,
-    decimals,
     network = ALGORAND_MAINNET,
-    store = Store.memory(),
     signer,
     signerAddress,
   } = parameters;
@@ -119,15 +113,12 @@ export function charge(parameters: charge.Parameters) {
     }
   }
 
-  if (asaId && decimals === undefined) {
-    throw new Error("decimals is required when asaId is set");
-  }
-
   return Method.toServer(Methods.charge, {
     defaults: {
       currency: asaId ? "ASA" : "ALGO",
       methodDetails: {
         challengeReference: "",
+        lease: "",
       },
       recipient: "",
     },
@@ -180,7 +171,7 @@ export function charge(parameters: charge.Parameters) {
           network,
           challengeReference,
           lease: leaseB64,
-          ...(asaId ? { asaId: String(asaId), decimals } : {}),
+          ...(asaId ? { asaId: String(asaId) } : {}),
           ...(signer && signerAddress
             ? { feePayer: true, feePayerKey: signerAddress }
             : {}),
@@ -205,7 +196,6 @@ export function charge(parameters: charge.Parameters) {
         challenge,
         algodUrl,
         recipient,
-        store,
         signer,
         signerAddress,
       );
@@ -220,7 +210,6 @@ async function verifyTransaction(
   challenge: ChallengeRequest,
   algodUrl: string,
   recipient: string,
-  store: Store.Store,
   signer?: TransactionSigner,
   signerAddress?: string,
 ) {
@@ -272,15 +261,9 @@ async function verifyTransaction(
   const paymentTxn = transactions[paymentIndex];
   verifyPaymentDetails(paymentTxn, challenge, recipient);
 
-  // Step 5: Check for dangerous fields on all transactions.
-  for (const txn of transactions) {
-    verifyNoDangerousFields(txn);
-  }
-
-  // Step 6: Verify lease if present in challenge.
-  if (challenge.methodDetails.lease) {
-    verifyLease(paymentTxn, challenge.methodDetails.lease);
-  }
+  // Step 5: Verify lease matches SHA-256(challengeReference).
+  // Lease is REQUIRED per spec — provides TxID uniqueness and mutual exclusion.
+  verifyLease(paymentTxn, challenge.methodDetails.lease);
 
   // Step 7: Fee payer verification and signing.
   let finalGroup = [...paymentGroup];
@@ -347,8 +330,9 @@ async function verifyTransaction(
   // Wait for confirmation (Algorand has instant finality).
   await waitForConfirmation(algodUrl, txid);
 
-  // Mark consumed to prevent replay.
-  await store.put(`algorand-charge:consumed:${txid}`, true);
+  // No server-side TxID tracking needed: the Algorand protocol rejects
+  // duplicate TxIDs within the validity window and expired ones outside it.
+  // The lease field provides mutual exclusion between distinct transactions.
 
   return Receipt.from({
     method: "algorand",
@@ -449,18 +433,6 @@ function verifyLease(txn: Transaction, expectedLeaseB64: string) {
   }
 }
 
-function verifyNoDangerousFields(txn: Transaction) {
-  if (txn.payment?.closeRemainderTo) {
-    throw dangerousTransaction("Transaction contains closeRemainderTo field");
-  }
-  if (txn.assetTransfer?.closeRemainderTo) {
-    throw dangerousTransaction("Transaction contains close asset to field");
-  }
-  if (txn.rekeyTo) {
-    throw dangerousTransaction("Transaction contains rekeyTo field");
-  }
-}
-
 function findFeePayerIndex(
   transactions: Transaction[],
   feePayerAddress: string,
@@ -513,12 +485,10 @@ function verifyFeePayerTransaction(
     );
   }
   if (txn.payment.closeRemainderTo) {
-    throw dangerousTransaction(
-      "Fee payer transaction must not have closeRemainderTo",
-    );
+    throw feePayerInvalid("Fee payer transaction must not have close field");
   }
   if (txn.rekeyTo) {
-    throw dangerousTransaction("Fee payer transaction must not have rekeyTo");
+    throw feePayerInvalid("Fee payer transaction must not have rekey field");
   }
   // Verify fee covers pooled minimum with safety bound (3x) against fee griefing.
   const maxReasonableFee = pooledMinimum * 3n;
@@ -621,10 +591,9 @@ type ChallengeRequest = {
   methodDetails: {
     asaId?: string;
     challengeReference: string;
-    decimals?: number;
     feePayer?: boolean;
     feePayerKey?: string;
-    lease?: string;
+    lease: string;
     network?: string;
     suggestedParams?: {
       fee: number;
@@ -644,8 +613,6 @@ export declare namespace charge {
     asaId?: bigint;
     /** Custom algod URL. Defaults to public API for the selected network. */
     algodUrl?: string;
-    /** Token decimals (required when asaId is set). */
-    decimals?: number;
     /** CAIP-2 network identifier. Defaults to Algorand MainNet. */
     network?: string;
     /** Algorand address of the account receiving payments. */
@@ -659,10 +626,5 @@ export declare namespace charge {
     signer?: TransactionSigner;
     /** The Algorand address corresponding to the signer. Required when signer is provided. */
     signerAddress?: string;
-    /**
-     * Pluggable key-value store for consumed-TxID tracking (replay prevention).
-     * Defaults to in-memory. Use a persistent store in production.
-     */
-    store?: Store.Store;
   };
 }

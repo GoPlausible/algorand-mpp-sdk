@@ -5,7 +5,6 @@ import type { FeePayer } from '../fee-payer'
 import {
   ALGORAND_TESTNET,
   TESTNET_ALGOD_URL,
-  TESTNET_INDEXER_URL,
 } from '../constants'
 
 const WEATHER: Record<string, { temperature: number; conditions: string; humidity: number }> = {
@@ -28,7 +27,6 @@ export function weatherRoutes(secretKey: string, feePayer: FeePayer | null, reci
       recipient,
       network: ALGORAND_TESTNET,
       algodUrl: TESTNET_ALGOD_URL,
-      indexerUrl: TESTNET_INDEXER_URL,
       ...(feePayer ? {
         signer: feePayer.signer,
         signerAddress: feePayer.address,

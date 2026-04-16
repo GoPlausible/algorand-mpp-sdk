@@ -4,7 +4,6 @@ export const ALGORAND_MAINNET = 'algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qz
 
 // TestNet USDC (ASA ID)
 export const USDC_ASA_ID = 10458941n
-export const USDC_DECIMALS = 6
 
 // MainNet USDC (ASA ID) — for reference
 export const USDC_MAINNET_ASA_ID = 31566704n
@@ -13,5 +12,3 @@ export const USDC_MAINNET_ASA_ID = 31566704n
 export const TESTNET_ALGOD_URL = 'https://testnet-api.4160.nodely.dev'
 export const MAINNET_ALGOD_URL = 'https://mainnet-api.4160.nodely.dev'
 
-// TestNet indexer URL
-export const TESTNET_INDEXER_URL = 'https://testnet-idx.4160.nodely.dev'

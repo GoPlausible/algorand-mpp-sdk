@@ -23,7 +23,7 @@ This SDK implements MPP for the **Algorand blockchain**, supporting:
 
 - **Native ALGO payments** and **ASA payments** (USDC, etc.)
 - **Fee sponsorship** — server pays transaction fees on behalf of clients
-- **Lease-based idempotency** — protocol-level replay protection bound to each challenge
+- **Lease-based mutual exclusion** — protocol-level challenge binding that ensures TxID uniqueness across charges and prevents double-settlement
 - **Server-broadcast** — server broadcasts transactions
 
 Built on [`@algorandfoundation/algokit-utils`](https://github.com/algorandfoundation/algokit-utils-ts) v10 (no algosdk dependency) and the [`mppx`](https://www.npmjs.com/package/mppx) protocol library.
@@ -121,7 +121,6 @@ algorand.charge({
   algodUrl: 'https://testnet-api.4160.nodely.dev',
   // ASA payment (USDC)
   asaId: 10458941n,
-  decimals: 6,
   // Fee sponsorship
   signer: feePayerSigner,
   signerAddress: 'FEE_PAYER_ADDRESS',

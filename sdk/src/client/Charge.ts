@@ -41,7 +41,6 @@ export function charge(parameters: charge.Parameters) {
       const {
         network,
         asaId,
-        decimals,
         challengeReference,
         feePayer: serverPaysFees,
         feePayerKey,

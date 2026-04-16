@@ -5,9 +5,7 @@ import type { FeePayer } from '../fee-payer'
 import {
   ALGORAND_TESTNET,
   TESTNET_ALGOD_URL,
-  TESTNET_INDEXER_URL,
   USDC_ASA_ID,
-  USDC_DECIMALS,
 } from '../constants'
 
 const PRODUCTS: Record<
@@ -60,9 +58,7 @@ export function marketplaceRoutes(secretKey: string, feePayer: FeePayer | null, 
           recipient: platformAddress,
           network: ALGORAND_TESTNET,
           algodUrl: TESTNET_ALGOD_URL,
-          indexerUrl: TESTNET_INDEXER_URL,
           asaId: USDC_ASA_ID,
-          decimals: USDC_DECIMALS,
           ...(feePayer ? {
             signer: feePayer.signer,
             signerAddress: feePayer.address,

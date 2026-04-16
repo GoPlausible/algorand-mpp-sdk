@@ -63,7 +63,6 @@ const mppx = Mppx.create({
       signerAddress: 'FEE_PAYER_ADDRESS...',
       // Optional: ASA payments
       asaId: 10458941n,
-      decimals: 6,
     }),
   ],
 })
@@ -86,12 +85,10 @@ algorand.charge() server factory
       ├── Decode transaction group (signed + unsigned)
       ├── Verify group ID consistency (≤16 txns, shared grp)
       ├── Verify payment amount, recipient, ASA ID
-      ├── Verify lease matches expected value
-      ├── Check for dangerous fields (rekey, close, aclose)
-      ├── Verify fee payer (pooled fee via formula)
+      ├── Verify lease matches SHA-256(challengeReference)
+      ├── Verify fee payer (pooled fee, no close/rekey on fee payer txn)
       ├── Sign fee payer transaction (if applicable)
       ├── Broadcast to Algorand network
-      ├── Record TxID as consumed (replay protection)
       └── Return Payment-Receipt
 ```
 
@@ -126,7 +123,7 @@ mppx.fetch(url)
   │   ├── Resolve suggested params (from challenge or algod)
   │   ├── Build transaction group
   │   │   ├── Fee payer txn (if server sponsors fees)
-  │   │   └── Payment txn (ALGO or ASA, with lease if provided)
+  │   │   └── Payment txn (ALGO or ASA, with required lease)
   │   ├── Assign group ID
   │   ├── Encode transactions to raw bytes
   │   ├── Sign via signer (use-wallet / custom)
@@ -170,9 +167,8 @@ export const charge = Method.from({
       methodDetails: z.object({
         network: z.optional(z.string()),
         challengeReference: z.string(),
-        lease: z.optional(z.string()),
+        lease: z.string(),
         asaId: z.optional(z.string()),
-        decimals: z.optional(z.number()),
         feePayer: z.optional(z.boolean()),
         feePayerKey: z.optional(z.string()),
         suggestedParams: z.optional(z.object({ ... })),

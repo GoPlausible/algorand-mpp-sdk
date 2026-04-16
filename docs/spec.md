@@ -48,7 +48,6 @@ The server's 402 response carries the challenge in the `request` auth-param of t
     "challengeReference": "unique-charge-id",
     "lease": "base64-encoded-32-byte-value...",
     "asaId": "10458941",
-    "decimals": 6,
     "feePayer": true,
     "feePayerKey": "FEE_PAYER_ALGO_ADDRESS...",
     "suggestedParams": {
@@ -66,9 +65,9 @@ The server's 402 response carries the challenge in the `request` auth-param of t
 Key rules from the spec:
 - `amount` is in base units (microalgos for ALGO, asset base units for ASAs).
 - `currency` is informational for ASAs — clients MUST use `asaId` (not `currency`) for asset identity and verify it against a trusted allowlist.
-- `asaId` and `decimals` are conditionally required together: both present for ASA payments, both absent for native ALGO.
+- `asaId` is present for ASA payments, absent for native ALGO. Clients needing decimal precision for display MUST fetch it from `v2/assets/{asaId}`.
 - `feePayer` and `feePayerKey` are paired: `feePayerKey` MUST be present when `feePayer` is `true`.
-- Servers SHOULD derive `lease` deterministically (e.g., `SHA-256(challengeReference)`) so the on-chain transaction is bound to the challenge at the ledger level.
+- `lease` is REQUIRED. Derived as `SHA-256(challengeReference)`, it provides TxID uniqueness across charges and mutual exclusion between distinct transactions covering the same charge.
 
 ## Credential Structure
 
@@ -123,7 +122,7 @@ When rejecting a credential, the server returns `402 Payment Required` with a fr
 - `malformed-credential` — credential could not be decoded or required fields are missing
 - `unknown-challenge` — `challenge.id` doesn't match an issued challenge, or the challenge is already consumed
 - `group-invalid` — group is too large, has mismatched Group IDs, or `paymentIndex` is out of range
-- `dangerous-transaction` — group contains `close`, `aclose`, or `rekey`
+- `fee-payer-invalid` — fee payer transaction failed verification (non-zero amount, `close`/`rekey` present, unreasonable fee, wrong sender)
 - `transfer-mismatch` — on-chain transfer doesn't match challenge (wrong recipient, amount, or ASA)
 - `transaction-not-found` / `transaction-failed` / `broadcast-failed` — settlement errors
 
@@ -132,12 +131,13 @@ When rejecting a credential, the server returns `402 Payment Required` with a fr
 This section summarises the spec's security model. See [draft-algorand-charge-00.md](../specs/draft-algorand-charge-00.md) "Security Considerations" for the complete text.
 
 - **Transport** — All traffic MUST use TLS 1.2+.
-- **Replay protection** — Two complementary layers:
-  - Server-side TxID tracking: servers MUST atomically check-and-consume TxIDs before accepting a credential.
-  - Algorand-native lease: when `lease` is present, the ledger rejects duplicate transactions from the same sender with the same `lx` while their validity windows overlap. Servers SHOULD always set `lease` to benefit from ledger-level replay prevention.
+- **Replay protection** — Three complementary layers:
+  - Algorand protocol: rejects duplicate TxIDs within the validity window and expired ones outside it. No server-side TxID store is required.
+  - Challenge state machine: once a challenge is claimed/fulfilled, no additional credential is accepted.
+  - Lease (mutual exclusion): the REQUIRED `lease` field (`lx`) prevents multiple distinct transactions covering the same charge from both being confirmed. Derived as `SHA-256(challengeReference)`, it also guarantees distinct TxIDs even when sender, receiver, amount, and round range are identical.
 - **Client-side challenge verification** — Before signing, clients MUST verify `amount`, `recipient`, `network`, `feePayerKey` (if present), and crucially `asaId` against a trusted registry. `currency` is NOT a trustworthy asset identifier.
-- **Dangerous transaction fields** — `close`, `aclose`, and `rekey` can cause irreversible loss of funds or account control. Clients MUST NOT set them; servers MUST reject any group that contains them.
+- **Dangerous transaction fields** — `close`, `aclose`, and `rekey` on the fee payer transaction could drain or compromise the server's fee payer account. Servers MUST reject fee payer transactions containing any of these fields. On the client's own payment transaction, these fields are the client's prerogative and do not affect payment verification.
 - **Fee payer verification** — The server verifies the fee payer transaction (correct sender, zero amount, self-pay, bounded fee, no `close`/`rekey`) before signing and broadcasting. The pooled fee is computed as `sum(max(fee_per_byte * txn_size, minFee))` across the group; servers enforce an upper bound (e.g., 3x the computed minimum) to prevent fee-griefing.
-- **Rekeyed accounts** — Algorand accounts can transfer signing authority via rekey. Servers verifying signatures MUST inspect the sender's `auth-addr` and reject unexpected rekeys on their own fee payer account.
+- **Signature validation** — Signature validity (including resolution of `auth-addr` for rekeyed accounts) is enforced by the Algorand protocol at simulation and broadcast. The server does not pre-validate signatures.
 - **Fee payer risks** — Servers acting as fee payer SHOULD rate-limit per client/IP, verify client balance before signing, and monitor fee payer balance (including MBR). If fee payer balance is insufficient, the server SHOULD fall back to `feePayer: false` rather than fail silently.
 - **Address validation** — Algorand addresses include a 4-byte checksum; implementations MUST validate it when parsing.

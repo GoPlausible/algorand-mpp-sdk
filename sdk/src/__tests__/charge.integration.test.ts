@@ -11,7 +11,7 @@
  * Run: pnpm test:integration
  */
 import { describe, it, expect, beforeAll } from "vitest";
-import { Mppx, Store } from "mppx/server";
+import { Mppx } from "mppx/server";
 import { Challenge, Credential } from "mppx";
 import { AlgorandClient } from "@algorandfoundation/algokit-utils";
 import { secretKeyToMnemonic } from "@algorandfoundation/algokit-utils/algo25";
@@ -31,7 +31,6 @@ import { encodeTransactionRaw } from "@algorandfoundation/algokit-utils/transact
 
 const TESTNET_ALGOD = DEFAULT_ALGOD_URLS[ALGORAND_TESTNET];
 const USDC_ASA_ID = 10458941n;
-const USDC_DECIMALS = 6;
 
 let feePayerSigner: TransactionSigner;
 let feePayerAddress: string;
@@ -68,7 +67,6 @@ beforeAll(() => {
 function createMppx(opts: {
   recipient: string;
   asaId?: bigint;
-  decimals?: number;
   signer?: TransactionSigner;
   signerAddress?: string;
 }) {
@@ -79,7 +77,7 @@ function createMppx(opts: {
         recipient: opts.recipient,
         network: ALGORAND_TESTNET,
         algodUrl: TESTNET_ALGOD,
-        ...(opts.asaId ? { asaId: opts.asaId, decimals: opts.decimals } : {}),
+        ...(opts.asaId ? { asaId: opts.asaId } : {}),
         ...(opts.signer && opts.signerAddress
           ? {
               signer: opts.signer,
@@ -138,7 +136,6 @@ describe("Server: challenge issuance", () => {
     const mppx = createMppx({
       recipient: recipientAddress,
       asaId: USDC_ASA_ID,
-      decimals: USDC_DECIMALS,
       signer: feePayerSigner,
       signerAddress: feePayerAddress,
     });
@@ -265,16 +262,6 @@ describe("Server: address validation", () => {
       }),
     ).toThrow("Invalid fee payer");
   });
-
-  it("rejects asaId without decimals", () => {
-    expect(() =>
-      charge({
-        recipient: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ",
-        network: ALGORAND_TESTNET,
-        asaId: 31566704n,
-      }),
-    ).toThrow("decimals is required");
-  });
 });
 
 describe("Client: transaction building", () => {
@@ -388,7 +375,6 @@ describe("End-to-end: full ALGO payment flow (TestNet)", () => {
       // This test sends 0.01 ALGO from the fee payer to itself.
       // It exercises the full 402 → build → sign → credential → verify → receipt flow.
 
-      const store = Store.memory();
       const mppx = Mppx.create({
         secretKey: "e2e-test-secret",
         methods: [
@@ -398,7 +384,6 @@ describe("End-to-end: full ALGO payment flow (TestNet)", () => {
             algodUrl: TESTNET_ALGOD,
             signer: feePayerSigner,
             signerAddress: feePayerAddress,
-            store,
           }),
         ],
       });

@@ -104,10 +104,8 @@ When the server receives the payment credential, it performs these checks:
 4. **Decode transactions** — Parse the up-to-16 signed and unsigned transactions from `paymentGroup`
 5. **Verify group ID** — All transactions share the same group ID (for groups of 2+)
 6. **Verify payment** — Transaction at `paymentIndex` has the expected type (`pay` or `axfer`), amount, recipient, and ASA ID from the challenge
-7. **Verify lease** — Payment transaction's `lx` field matches the expected lease
-8. **Check dangerous fields** — Reject any transaction with `rekey`, `close`, or `aclose`
-9. **Verify fee payer** — If fee sponsorship is enabled, check sender, zero amount, self-pay, pooled fee within bounds, no rekey/close
-10. **Sign fee payer** — Sign the fee payer transaction with the server's fee payer key
-11. **Broadcast** — Submit the fully signed group to the Algorand network
-12. **Record TxID** — Atomically mark the payment TxID as consumed (replay protection)
-13. **Issue receipt** — Return `Payment-Receipt` header with `method`, `reference` (TxID), `status`, and `timestamp`
+7. **Verify lease** — Payment transaction's `lx` field matches `SHA-256(challengeReference)`
+8. **Verify fee payer** — If fee sponsorship is enabled, check sender, zero amount, self-pay, pooled fee within bounds, no `close`/`rekey` on fee payer txn
+9. **Sign fee payer** — Sign the fee payer transaction with the server's fee payer key
+10. **Broadcast** — Submit the fully signed group to the Algorand network
+11. **Issue receipt** — Return `Payment-Receipt` header with `method`, `reference` (TxID), `status`, and `timestamp`
