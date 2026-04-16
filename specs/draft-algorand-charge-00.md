@@ -84,12 +84,6 @@ informative:
     author:
       - org: Algorand Foundation
     date: 2026
-  ALGORAND-REKEY:
-    title: "Algorand Account Rekeying"
-    target: https://dev.algorand.co/concepts/accounts/rekeying/
-    author:
-      - org: Algorand Foundation
-    date: 2026
   MSGPACK:
     title: "MessagePack Specification"
     target: https://msgpack.org/
@@ -192,8 +186,10 @@ verification procedures for the "algorand" payment method.
 # Terminology
 
 Transaction Identifier (TxID)
-: A base32-encoded (without padding) SHA-512/256 hash of the
-  canonical msgpack-encoded transaction, producing a 52-character
+: The SHA-512/256 hash of `"TX" || msgpack(txn_body)`, where
+  `txn_body` is the unsigned transaction fields (excluding
+  the signature wrapper `sig`/`msig`/`lsig`). The hash is
+  base32-encoded without padding, producing a 52-character
   uppercase string. Serves as both the transaction identifier
   and proof of payment in this specification.
 
@@ -207,8 +203,8 @@ Atomic Transaction Group
 : A set of up to 16 top-level transactions that are submitted
   and executed atomically on the Algorand network. Either all
   transactions in the group succeed, or the entire group is
-  rejected. Groups are identified by a Group ID, which is the
-  SHA-512/256 hash of the concatenated transaction hashes
+  rejected. Groups are identified by a Group ID, computed as
+  `SHA-512/256("TG" || TxID[0] || TxID[1] || ... || TxID[n])`
   {{ALGORAND-ATOMIC}}. Each top-level transaction is authorized
   by an external signature (Ed25519, multisig, or logic
   signature). Additionally, applications (smart contracts)
@@ -255,13 +251,6 @@ Lease
   to bind payments to challenges at the Algorand protocol
   level, providing ledger-enforced idempotency
   {{ALGORAND-LEASE}}.
-
-Rekeyed Account
-: An Algorand account whose signing authority has been
-  transferred to a different key via a rekey transaction.
-  After rekeying, the account address remains the same but
-  transactions must be signed by the new authorized key
-  (`auth-addr`) {{ALGORAND-REKEY}}.
 
 Inner Transaction
 : A transaction authorized by an application (smart contract)
@@ -379,15 +368,16 @@ network
 asaId
 : Conditionally REQUIRED. The ASA ID (64-bit unsigned integer)
   of the asset to transfer, encoded as a decimal string. If
-  omitted, the payment is in native ALGO. When present,
-  `decimals` MUST also be present.
-
-decimals
-: Conditionally REQUIRED. The number of decimal places for the
-  ASA (0-19). MUST be present when `asaId` is present; MUST
-  be absent when `asaId` is absent. Used by the client to
-  display human-readable amounts and by the server to verify
-  the transfer amount.
+  omitted, the payment is in native ALGO. The `asaId` is the
+  sole canonical identifier for the asset. The `amount` field
+  is always in the asset's base units (smallest indivisible
+  unit), so no decimal conversion is required for transaction
+  construction or server-side verification: the server
+  compares `aamt` directly against `amount`. Clients needing
+  decimal precision for human-readable display (e.g., to
+  show "1.00 USDC" instead of "1000000") MUST fetch the
+  authoritative `decimals` value from the asset's on-chain
+  parameters via `v2/assets/{asaId}`, not from the challenge.
 
 challengeReference
 : REQUIRED. A server-generated unique identifier for this
@@ -399,27 +389,41 @@ challengeReference
   which contains the on-chain transaction identifier (TxID).
 
 lease
-: OPTIONAL. A base64-encoded 32-byte value to set as the
-  `lx` (lease) field on the payment transaction(s)
-  {{ALGORAND-LEASE}}. When present, the Algorand protocol
-  enforces that no two transactions from the same sender
-  with the same lease value can be confirmed within
-  overlapping validity windows (`firstValid` to `lastValid`).
-  This provides protocol-level idempotency: even if a client
-  retries a failed request with a new transaction, the
-  ledger itself prevents double-spend for the same
-  (sender, lease) pair.
+: REQUIRED. A base64-encoded 32-byte value to set as the
+  `lx` (lease) field on the payment transaction
+  {{ALGORAND-LEASE}}. The server MUST set this to
+  `SHA-256(challengeReference)`, deterministically binding
+  the on-chain payment to the specific challenge.
 
-  Servers SHOULD set `lease` to a deterministic value
-  derived from the challenge, such as
-  `SHA-256(challengeReference)`, binding the on-chain
-  payment to the specific challenge at the ledger level.
-  This complements server-side TxID tracking with an
-  Algorand-native replay prevention mechanism.
+  The lease serves two critical functions:
 
-  When `lease` is present, clients MUST set the `lx` field
-  on the payment transaction to the provided value. Servers
-  MUST verify the `lx` field matches the expected lease
+  1. **TxID uniqueness across challenges**: because the
+     `lx` field is part of the transaction body, different
+     challenges produce different TxIDs even when sender,
+     receiver, amount, and round range are identical. Without
+     this, two charges with the same parameters would hash
+     to the same TxID, causing the protocol to dedupe them
+     as one payment — leaving the merchant short-paid.
+
+  2. **Mutual exclusion**: the Algorand protocol enforces
+     that no two transactions from the same sender with the
+     same `lx` value can be confirmed within overlapping
+     validity windows (`firstValid` to `lastValid`). If a
+     client signs two distinct transaction groups (A and B)
+     covering the same charge, the lease ensures that if A
+     is confirmed then B is rejected (and vice-versa). This
+     prevents double-settlement for a single charge.
+
+  Note: replay of the *exact same transaction* (same TxID)
+  is already handled by the Algorand protocol, which
+  rejects duplicate TxIDs within the validity window and
+  expired TxIDs outside it. The lease addresses a different
+  threat: multiple *distinct* transactions covering the same
+  logical payment.
+
+  Clients MUST set the `lx` field on the payment
+  transaction to the provided value. Servers MUST verify
+  the `lx` field matches `SHA-256(challengeReference)`
   during credential verification.
 
 feePayer
@@ -504,7 +508,6 @@ OSGASU",
     "network": "algorand:wGHE2Pwdvd7S12BL5FaOP20EGYes\
 N73ktiC1qzkkit8=",
     "asaId": "31566704",
-    "decimals": 6,
     "challengeReference": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "lease": "Yk3pR8wN5vB2mQ7jT1tX9cA6eF4gD0iL\
 sU3oK8nM1bZ="
@@ -585,8 +588,8 @@ unsigned transactions (e.g., the fee payer transaction awaiting
 the server's signature) contain only the transaction body.
 
 All transactions in the group MUST share the same Group ID,
-computed as the SHA-512/256 hash of the concatenated transaction
-hashes. The `paymentIndex` identifies the transaction that
+computed as `SHA-512/256("TG" || TxID[0] || ... || TxID[n])`.
+The `paymentIndex` identifies the transaction that
 transfers funds to the `recipient` from the challenge request.
 
 Example (decoded):
@@ -668,23 +671,25 @@ larger serialized transactions may require higher fees.
 When `feePayer` is `true`:
 
 1. **Client constructs group**: The client builds the payment
-   transaction(s) with `fee` set to `0` and `flatFee` set to
-   `true`. The client also includes an unsigned transaction
+   transaction(s) with the `fee` field set to `0` in the
+   transaction body. (Note: Algorand SDKs typically expose a
+   `flatFee` flag to prevent automatic fee computation; this
+   is an SDK convenience, not a wire protocol field.) The
+   client also includes an unsigned transaction
    from the server's `feePayerKey` address: a zero-amount
    ALGO payment (`type: pay`) to itself. Since client
    transactions set `fee` to `0`, the fee payer transaction
-   MUST carry the entire pooled fee. Under normal conditions,
-   `N * minFee` (where `N` is the number of transactions)
-   suffices. Under network congestion, the effective required
-   fee may be higher due to `fee_per_byte` scaling with
-   serialized transaction size; the server MAY adjust the fee
-   payer transaction's fee before signing to account for this
-   without invalidating client signatures (since the fee payer
-   transaction is unsigned when received from the client).
+   MUST carry the entire pooled fee, computed using values
+   from `suggestedParams` or `v2/transactions/params`.
 
-2. **Client signs payment transaction(s)**: The client signs
-   only its own transaction(s) in the group. The fee payer
-   transaction is left unsigned.
+2. **Client assigns Group ID and signs**: The client assigns
+   the Group ID to all transactions (including the fee payer
+   transaction), then signs only its own transaction(s). The
+   fee payer transaction is left unsigned. Once the Group ID
+   is assigned and any transaction is signed, every
+   transaction in the group is immutable — including the
+   unsigned fee payer transaction, whose bytes contribute to
+   the Group ID hash.
 
 3. **Client sends credential**: The client sends the group
    (with the unsigned fee payer transaction) as a
@@ -693,13 +698,13 @@ When `feePayer` is `true`:
 4. **Server verifies and signs**: The server verifies the
    group contents (see {{fee-payer-verification}}), then
    signs the fee payer transaction with its fee payer key.
-   Note: modifying the fee payer transaction after group
-   assignment would change the Group ID and invalidate all
-   client signatures. If the fee on the fee payer
-   transaction is insufficient (e.g., due to congestion),
-   the server MUST reject the credential and issue a fresh
-   challenge with updated `suggestedParams` reflecting
-   current fee requirements.
+   The server MUST NOT modify the fee payer transaction
+   (changing any field would alter the Group ID and
+   invalidate all client signatures). If the fee on the
+   fee payer transaction is insufficient (e.g., due to
+   congestion), the server MUST reject the credential and
+   issue a fresh challenge with updated `suggestedParams`
+   reflecting current fee requirements.
 
 5. **Server broadcasts**: The fully signed group is broadcast
    to the Algorand network.
@@ -770,33 +775,46 @@ Upon receiving a request with a credential, the server MUST:
      `amount`, `arcv` matches `recipient`, and `xaid`
      matches `asaId`.
 
-5. Verify that no transaction in the group contains
-   dangerous fields:
+5. Verify that the payment transaction's `lx` field
+   matches `SHA-256(challengeReference)`.
 
-   - `close` / `aclose` (close remainder to and asset close to): MUST be
-     absent on all transactions.
-   - `rekey` (rekey to): MUST be absent on all
-     transactions.
-
-6. If the challenge included a `lease` value, verify
-   that the payment transaction's `lx` field matches
-   the expected lease.
+6. Verify the group contains only expected transactions:
+   the payment transaction and (when `feePayer` is
+   `true`) the fee payer transaction. Reject any group
+   containing unexpected transactions.
 
 7. If `feePayer` is `true`, verify the fee payer
-   transaction (see {{fee-payer-verification}}).
+   transaction (see {{fee-payer-verification}}). The
+   fee payer transaction MUST NOT contain `close`,
+   `aclose`, or `rekey` fields — these could drain or
+   compromise the server's fee payer account.
 
-8. If `feePayer` is `true`, sign the fee payer
+   Note: `close`, `aclose`, and `rekey` on the client's
+   own payment transaction are the client's prerogative
+   and do not affect the server's payment verification
+   (`arcv`/`aamt`/`xaid` checks are sufficient).
+
+8. Simulate the transaction group against an Algorand
+   node's `v2/transactions/simulate` endpoint. If
+   simulation fails, reject the credential. This
+   catches invalid transactions (including
+   future-dated `firstValid`, insufficient balance,
+   and invalid signatures) without spending fees.
+
+   Note: signature validity (including resolution of
+   `auth-addr` for rekeyed accounts) is enforced by
+   the Algorand protocol at simulation and broadcast.
+   The server does not pre-validate signatures.
+
+9. If `feePayer` is `true`, sign the fee payer
    transaction with the server's fee payer key.
 
-9.  Broadcast the fully signed group to the Algorand
+10. Broadcast the fully signed group to the Algorand
     network via the `v2/transactions` endpoint.
 
-10. Algorand provides instant finality: once the
+11. Algorand provides instant finality: once the
     transaction is included in a block, it is final.
     No additional confirmation is needed.
-
-11. Record the payment transaction's TxID as consumed
-    to prevent replay (see {{replay-protection}}).
 
 12. Return the resource with a Payment-Receipt header.
 
@@ -834,53 +852,49 @@ servers MUST check:
 
 ## Replay Protection {#replay-protection}
 
-This specification provides two layers of replay
-protection: server-side TxID tracking and Algorand-native
-lease enforcement.
+This specification relies on three complementary layers
+of replay protection, each enforced at a different level:
 
-### Server-Side TxID Tracking
+### Algorand Protocol — TxID Uniqueness
 
-Servers MUST maintain a set of consumed transaction
-identifiers. Before accepting a credential, the server
-MUST check whether the TxID has already been consumed.
-After successful verification, the server MUST atomically
-mark the TxID as consumed.
+The Algorand protocol natively rejects transaction replay:
 
-The Algorand transaction identifier is globally unique on
-the network (derived from the transaction contents
-including round range and group ID), making it a natural
-replay prevention token. A TxID that has been consumed
-MUST NOT be accepted again, even if presented with a
-different challenge ID.
+- Within the validity window (`firstValid` to
+  `lastValid`): algod rejects a transaction whose TxID
+  has already been confirmed, returning a "duplicate"
+  error.
+- Outside the validity window: algod rejects the
+  transaction as "expired."
 
-The TxID is derived from the payment transaction after
-broadcast.
+The server treats these algod error codes as authoritative
+replay detection. No server-side TxID store is needed.
 
-Servers MUST retain consumed TxIDs for at least the
-duration of the challenge validity window (the `expires`
-auth-param) plus a grace period of 5 minutes. After this
-retention period, the TxID MAY be pruned, as the
-corresponding transactions will have long exceeded their
-on-chain validity window (`lastValid` round).
+### Challenge State Machine — Credential Replay
 
-### Lease-Based Protocol Enforcement
+The challenge state machine (below) prevents the same
+credential from being processed twice at the application
+layer. Once a challenge transitions to `claimed`, no
+additional credential is accepted for that challenge.
+Once `fulfilled`, retries receive the cached response.
 
-When the `lease` field is present in the challenge, the
-Algorand protocol itself enforces idempotency at the
-ledger level {{ALGORAND-LEASE}}. The lease field (`lx`)
-on a transaction prevents any other transaction from the
-same sender with the same lease value from being confirmed
-while the first transaction's validity window
-(`firstValid` to `lastValid`) overlaps.
+### Lease — Mutual Exclusion
 
-This provides a stronger guarantee than server-side
-tracking alone: even if the server's TxID store is lost
-or unavailable, the ledger prevents double-spend for the
-same (sender, lease) pair within the validity window.
+The `lease` field (`lx`) on the payment transaction
+prevents multiple *distinct* transactions covering the
+same charge from both being confirmed. If a client signs
+two different transaction groups (A and B) for the same
+charge (same `challengeReference` → same `lx` value),
+the Algorand protocol ensures that if A is confirmed
+then B is rejected, and vice-versa. This is not replay
+protection (the protocol's TxID uniqueness already
+handles that) — it is mutual exclusion between
+logically-equivalent-but-distinct transactions.
 
-Servers SHOULD derive the lease deterministically from
-the challenge (e.g., `lease = SHA-256(challengeReference)`)
-so that payment-to-challenge binding is enforced on-chain.
+Because `lease` is REQUIRED and derived as
+`SHA-256(challengeReference)`, every charge produces a
+unique `lx` value, which in turn guarantees distinct
+TxIDs even when sender, receiver, amount, and round
+range are identical across charges.
 
 ### Challenge State Machine
 
@@ -942,11 +956,49 @@ optionally adds a fee payer signature and broadcasts:
    group.
 2. If `feePayer` is `true`, the server verifies the fee
    payer transaction and signs it with its fee payer key.
-3. Server broadcasts the group to Algorand.
-4. Transaction is included in a block with instant finality
+3. Server simulates the group to catch failures without
+   spending fees.
+4. Server materializes the response (prepares the resource
+   payload) before broadcasting, so that the only remaining
+   failure after broadcast is network/transport.
+5. Server broadcasts the group to Algorand.
+6. Transaction is included in a block with instant finality
    (sub-4-second block time, no forks).
-5. Server records the TxID as consumed and returns the
-   resource with a Payment-Receipt header.
+7. Server returns the resource with a Payment-Receipt header.
+
+## Idempotent Response Delivery
+
+Algorand settlement is irreversible: once confirmed, a
+transaction cannot be reversed or charged back. If the
+server broadcasts successfully but fails to deliver the
+response (e.g., server crash, network drop), there is
+no on-chain refund path. The core HTTP Payment
+Authentication Scheme's Idempotency and Concurrent
+Request Handling requirements ({{I-D.httpauth-payment}})
+are therefore the sole recovery mechanism.
+
+Servers SHOULD compute the expected TxID from the unsigned
+transaction body (the `txn` field inside the signed
+wrapper, excluding signatures) and persist it together
+with the challenge state **before** broadcasting. This enables
+recovery on retry:
+
+- **Within validity window**: re-broadcast attempt;
+  algod returns "duplicate" if the original landed,
+  confirming settlement. Server serves the response.
+- **After validity window expiry**: algod rejects with
+  "expired" on broadcast. Server looks up the
+  pre-computed TxID via indexer
+  (`v2/transactions/{txid}`). If found and confirmed,
+  settlement occurred; server serves the response.
+  If not found, the transaction expired without
+  landing; client was not charged; server returns
+  402 with a fresh challenge.
+
+Servers SHOULD prepare the full response payload
+before broadcasting (step 4 above), so that only
+network/transport failures remain after the irreversible
+broadcast step.
 
 ## Client Transaction Construction
 
@@ -987,8 +1039,8 @@ When `feePayer` is `true` in the challenge:
   The fee payer's `fee` MUST be at least the sum of all
   required fees in the group. Clients MUST NOT hardcode
   fee values.
-- The client MUST set `fee` to `0` and `flatFee` to
-  `true` on its own transaction(s).
+- The client MUST set the `fee` field to `0` on its own
+  transaction(s).
 - The fee payer transaction SHOULD be the first
   transaction in the group (index 0).
 
@@ -1008,16 +1060,16 @@ When `feePayer` is `false` or absent:
 
 After constructing all transactions, the client MUST:
 
-1. If the challenge includes a `lease` value, set the
-   `lx` field on the payment transaction to the
-   provided lease value. The fee payer transaction
-   MUST NOT have a lease set (it is a zero-amount
-   self-payment, not a payment to the server).
+1. Set the `lx` field on the payment transaction to the
+   `lease` value from the challenge. The fee payer
+   transaction MUST NOT have a lease set (it is a
+   zero-amount self-payment, not a payment to the
+   server).
 
 2. Assign a Group ID to all transactions using the
-   `assign_group_id` operation, which computes the
-   SHA-512/256 hash of the concatenated transaction
-   hashes and sets the `grp` field on each transaction.
+   `assign_group_id` operation, which computes
+   `SHA-512/256("TG" || TxID[0] || ... || TxID[n])`
+   and sets the `grp` field on each transaction.
 
 3. Sign each transaction with the appropriate key(s).
    Fee payer transactions (when `feePayer` is `true`)
@@ -1102,11 +1154,11 @@ https://paymentauth.org/problems/algorand/group-invalid
   or `paymentIndex` out of range. A fresh challenge MUST be
   included in `WWW-Authenticate`.
 
-https://paymentauth.org/problems/algorand/dangerous-transaction
-: HTTP 402. The transaction group contains dangerous
-  fields such as `close`, `aclose`, or `rekey` that could
-  cause asset or account loss. A fresh challenge MUST be
-  included in `WWW-Authenticate`.
+https://paymentauth.org/problems/algorand/fee-payer-invalid
+: HTTP 402. The fee payer transaction failed verification:
+  non-zero amount, `close`/`aclose`/`rekey` fields present,
+  unreasonable fee, or wrong sender. A fresh challenge MUST
+  be included in `WWW-Authenticate`.
 
 https://paymentauth.org/problems/algorand/transfer-mismatch
 : HTTP 402. The on-chain transfer does not match the
@@ -1156,28 +1208,13 @@ connections.
 
 ## Replay Protection
 
-This specification employs two complementary replay
-prevention mechanisms:
-
-1. **Server-side TxID tracking**: Servers MUST track
-   consumed transaction identifiers and reject any TxID
-   that has already been accepted. The check-and-consume
-   operation MUST be atomic to prevent race conditions.
-   Algorand transaction identifiers are globally unique
-   (derived from the transaction contents, round range,
-   and group ID), making them natural replay prevention
-   tokens.
-
-2. **Algorand-native lease enforcement**: When the
-   challenge includes a `lease` value, the Algorand
-   protocol prevents duplicate transactions from the
-   same sender with the same lease within overlapping
-   validity windows {{ALGORAND-LEASE}}. This binds the
-   payment to the challenge at the ledger level,
-   providing replay protection even if the server's
-   state is compromised. Servers SHOULD always include
-   `lease` in challenges to benefit from this
-   protocol-level guarantee.
+Three layers prevent replay (see {{replay-protection}}):
+the Algorand protocol rejects duplicate TxIDs and expired
+transactions; the challenge state machine prevents
+credential reuse at the application layer; and the
+required `lease` field provides mutual exclusion between
+distinct transactions covering the same charge. No
+server-side TxID store is required.
 
 ## Client-Side Verification
 
@@ -1192,9 +1229,9 @@ Clients MUST verify the challenge before signing:
 3. `recipient` is the expected party
 4. `feePayerKey`, if present, is the expected server
 5. `network` matches the client's configured network
-6. `lease`, if present, is consistent with the
-   `challengeReference` (clients MAY independently
-   derive and verify the lease value)
+6. `lease` is consistent with the `challengeReference`
+   (clients SHOULD independently compute
+   `SHA-256(challengeReference)` and verify it matches)
 
 Malicious servers could request excessive amounts,
 direct payments to unexpected recipients, or specify
@@ -1206,10 +1243,14 @@ malicious `asaId`).
 
 Algorand transactions support `close` (close remainder
 to), `aclose` (asset close to), and `rekey` (rekey to)
-fields that can cause irreversible loss of funds or
-account control. Clients MUST NOT include these fields
-in payment transactions. Servers MUST reject any
-transaction group containing these fields.
+fields. When present on the fee payer transaction, these
+fields could drain or compromise the server's fee payer
+account. Servers MUST reject fee payer transactions
+containing any of these fields (see
+{{fee-payer-verification}}). On the client's own payment
+transaction, these fields affect only the client's
+account and do not alter the payment to the recipient;
+servers need not reject them.
 
 ## RPC Trust
 
@@ -1284,43 +1325,18 @@ provides `suggestedParams` in the challenge, clients
 SHOULD verify the round range is plausible. A malicious
 server could provide an expired round range, causing the
 client to sign a transaction that will never be accepted.
-The practical risk is limited to a failed
-payment attempt that the client can retry.
+The practical risk is limited to a failed payment attempt
+that the client can retry.
 
-## Rekeyed Account Authorization {#rekeyed-accounts}
-
-Algorand accounts can be rekeyed, transferring signing
-authority to a different key while retaining the same
-address {{ALGORAND-REKEY}}. After rekeying, transactions
-from the account must be signed by the new authorized
-key (the `auth-addr`), not the original public key
-embedded in the address.
-
-Servers verifying `type="transaction"` credentials MUST
-account for rekeyed accounts:
-
-1. When verifying signatures on client payment
-   transactions, the server MUST check whether the
-   sender account has been rekeyed by inspecting the
-   account's `auth-addr` field (via `v2/accounts/{addr}`).
-   If the account is rekeyed, the signature MUST be
-   from the `auth-addr` key, not the address's embedded
-   public key.
-
-2. Servers MUST reject fee payer transactions where the
-   server's fee payer account has been unexpectedly
-   rekeyed. Servers SHOULD monitor their fee payer
-   account for rekeying events.
-
-3. Clients whose accounts are rekeyed MUST sign with
-   their current authorized key. The `snd` field still
-   reflects the original account address.
-
-This is an Algorand-specific authorization model with no
-direct equivalent on other chains. Implementations that
-skip `auth-addr` verification will reject valid
-transactions from rekeyed accounts or, worse, accept
-transactions with invalid signatures.
+The charge intent requires immediate settlement. A
+transaction with `firstValid` significantly beyond the
+current round is not immediately broadcastable and would
+force the server to hold the credential until the window
+opens — effectively a scheduled payment, which is outside
+the scope of the charge intent. The mandatory simulation
+step ({{transaction-verification}}) catches this: algod
+rejects transactions whose `firstValid` has not yet been
+reached.
 
 ## Algorand Address Verification
 
@@ -1473,7 +1489,6 @@ OSGASU",
     "network": "algorand:wGHE2Pwdvd7S12BL5FaOP20EGYes\
 N73ktiC1qzkkit8=",
     "asaId": "31566704",
-    "decimals": 6,
     "challengeReference": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "lease": "Yk3pR8wN5vB2mQ7jT1tX9cA6eF4gD0iL\
 sU3oK8nM1bZ=",
@@ -1634,11 +1649,15 @@ where checksum = sha512_256(publicKey)[-4:]
 ## Logic Signature Addresses
 
 For contract accounts (logic signatures), the address is
-derived from the program bytecode:
+derived from the program bytecode. The program hash serves
+as the 32-byte "public key equivalent," and the checksum
+is computed from that hash (not from the bytecode
+directly):
 
 ~~~
-address = base32_nopad(sha512_256("Program" || bytecode)
-  || checksum)
+program_hash = sha512_256("Program" || bytecode)
+checksum     = sha512_256(program_hash)[-4:]
+address      = base32_nopad(program_hash || checksum)
 ~~~
 
 This encoding ensures that addresses can be derived
@@ -1757,5 +1776,5 @@ identifier as an argument to the logic signature program.
 
 # Acknowledgements
 
-The author thanks the Algorand Foundation, Algorand Foundation CTO (Bruno Martins) and engineering team, Algorand developer community, the GoPlausible team, and the MPP working group for their input
+The author thanks the Algorand Foundation, Algorand Foundation CTO and engineering team, Algorand developer community, the GoPlausible team, and the MPP working group for their input
 on this specification.
