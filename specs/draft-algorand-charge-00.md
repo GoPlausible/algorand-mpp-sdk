@@ -313,18 +313,36 @@ amount
   unsigned integer (max 18,446,744,073,709,551,615).
 
 currency
-: REQUIRED. A display label identifying the unit for `amount`.
-  For native ALGO, MUST be the string "ALGO" (uppercase). For
-  ASAs, this field is INFORMATIONAL ONLY -- the canonical asset
-  identity is `asaId` in `methodDetails`. Implementations MUST
-  use `asaId` (not `currency`) when constructing and verifying
-  transactions. The value SHOULD be a human-readable ticker
-  (e.g., "USDC") to aid client display. Since ASA names and
-  unit names are NOT unique on Algorand (any account can create
-  an ASA with any name), clients MUST NOT rely on `currency` to
-  identify the asset; clients MUST verify `asaId` against a
-  trusted asset registry or their own allowlist before signing.
-  MUST NOT exceed 128 characters.
+: REQUIRED. An object identifying the payment unit for
+  `amount`. The object contains:
+
+  - `id` (string): REQUIRED. The canonical Algorand asset
+    identifier, encoded as a decimal string. For native ALGO,
+    this value MUST be `"0"`. For ASAs, this value MUST be the
+    ASA ID (a 64-bit unsigned integer).
+  - `unitName` (string): REQUIRED. A display label for the
+    unit. For native ALGO, this value MUST be "ALGO"
+    (uppercase). For ASAs, this field is INFORMATIONAL ONLY
+    and MUST be the ASA unit name fetched from the on-chain
+    asset parameters for `id`. The value MUST NOT exceed
+    8 characters.
+
+  Implementations MUST use `currency.id` when constructing and
+  verifying transactions. Since ASA names and unit names are
+  NOT unique on Algorand (any account can create an ASA with
+  any name), clients MUST NOT rely on `currency.unitName` to
+  identify the asset; clients MUST verify `currency.id` against
+  a trusted asset registry or their own allowlist before signing.
+  The `amount` field is always in the asset's base units
+  (smallest indivisible unit), so no decimal conversion is
+  required for transaction construction or server-side
+  verification: the server compares `amt` or `aamt` directly
+  against `amount`, depending on transaction type. Clients
+  needing decimal precision for human-readable display (e.g.,
+  to show "1.00 USDC" instead of "1000000") MUST fetch the
+  authoritative `decimals` value from the asset's on-chain
+  parameters via `v2/assets/{currency.id}`, not from the
+  challenge.
 
 description
 : OPTIONAL. A human-readable memo describing the resource or
@@ -339,12 +357,13 @@ recipient
 
 externalId
 : OPTIONAL. Merchant's reference (e.g., order ID, invoice
-  number), per {{I-D.payment-intent-charge}}. May be used for
-  reconciliation or idempotency. When present, clients SHOULD
-  include this value in the transaction's `note` field
-  (max 1024 bytes), making it visible on-chain for auditing
-  and reconciliation. Servers MAY verify the note matches the
-  `externalId` from the challenge.
+  number), per {{I-D.payment-intent-charge}}. This field is for
+  reconciliation and audit only. Implementations MUST NOT use it
+  for idempotency. When present, clients SHOULD include this
+  value in the transaction's `note` field (max 1024 bytes),
+  making it visible on-chain for auditing and reconciliation.
+  Servers MAY verify the note matches the `externalId` from the
+  challenge.
 
 ## Method Details
 
@@ -364,20 +383,6 @@ network
   Defaults to the MainNet value if omitted. Clients MUST
   reject challenges whose network does not match their
   configured network.
-
-asaId
-: Conditionally REQUIRED. The ASA ID (64-bit unsigned integer)
-  of the asset to transfer, encoded as a decimal string. If
-  omitted, the payment is in native ALGO. The `asaId` is the
-  sole canonical identifier for the asset. The `amount` field
-  is always in the asset's base units (smallest indivisible
-  unit), so no decimal conversion is required for transaction
-  construction or server-side verification: the server
-  compares `aamt` directly against `amount`. Clients needing
-  decimal precision for human-readable display (e.g., to
-  show "1.00 USDC" instead of "1000000") MUST fetch the
-  authoritative `decimals` value from the asset's on-chain
-  parameters via `v2/assets/{asaId}`, not from the challenge.
 
 challengeReference
 : REQUIRED. A server-generated unique identifier for this
@@ -477,7 +482,10 @@ suggestedParams
 ~~~json
 {
   "amount": "10000000",
-  "currency": "ALGO",
+  "currency": {
+    "id": "0",
+    "unitName": "ALGO"
+  },
   "recipient": "7XKXTG2CW87D97TXJSDPBD5JBKHETQA83TZRUJ\
 OSGASU",
   "description": "Weather API access",
@@ -500,14 +508,16 @@ the Algorand protocol level.
 ~~~json
 {
   "amount": "1000000",
-  "currency": "USDC",
+  "currency": {
+    "id": "31566704",
+    "unitName": "USDC"
+  },
   "recipient": "7XKXTG2CW87D97TXJSDPBD5JBKHETQA83TZRUJ\
 OSGASU",
   "description": "Premium API call",
   "methodDetails": {
     "network": "algorand:wGHE2Pwdvd7S12BL5FaOP20EGYes\
 N73ktiC1qzkkit8=",
-    "asaId": "31566704",
     "challengeReference": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "lease": "Yk3pR8wN5vB2mQ7jT1tX9cA6eF4gD0iL\
 sU3oK8nM1bZ="
@@ -516,16 +526,19 @@ sU3oK8nM1bZ="
 ~~~
 
 This requests a transfer of 1 USDC (1,000,000 base units,
-ASA ID 31566704). Implementations MUST use `asaId`
-(31566704) — not `currency` ("USDC") — to identify the
-asset when constructing and verifying transactions.
+ASA ID 31566704). Implementations MUST use `currency.id`
+("31566704") -- not `currency.unitName` ("USDC") -- to
+identify the asset when constructing and verifying transactions.
 
 ### Fee Sponsorship Example
 
 ~~~json
 {
   "amount": "10000000",
-  "currency": "ALGO",
+  "currency": {
+    "id": "0",
+    "unitName": "ALGO"
+  },
   "recipient": "7XKXTG2CW87D97TXJSDPBD5JBKHETQA83TZRUJ\
 OSGASU",
   "description": "Weather API access",
@@ -767,13 +780,13 @@ Upon receiving a request with a credential, the server MUST:
 4. Locate the transaction at `paymentGroup[paymentIndex]`
    and verify the payment details:
 
-   - For native ALGO payments (`asaId` absent): verify
+   - For native ALGO payments (`currency.id` is `"0"`): verify
      the transaction `type` is `pay`, `amt` matches
      `amount`, and `rcv` matches `recipient`.
-   - For ASA payments (`asaId` present): verify the
+   - For ASA payments (`currency.id` is not `"0"`): verify the
      transaction `type` is `axfer`, `aamt` matches
      `amount`, `arcv` matches `recipient`, and `xaid`
-     matches `asaId`.
+     matches `currency.id`.
 
 5. Verify that the payment transaction's `lx` field
    matches `SHA-256(challengeReference)`.
@@ -867,7 +880,10 @@ The Algorand protocol natively rejects transaction replay:
   transaction as "expired."
 
 The server treats these algod error codes as authoritative
-replay detection. No server-side TxID store is needed.
+protocol-level replay detection. A server-side TxID store is
+not needed for protocol replay detection, but durable
+idempotency state is needed for response recovery after
+broadcast (see {{idempotent-response-delivery}}).
 
 ### Challenge State Machine — Credential Replay
 
@@ -966,39 +982,57 @@ optionally adds a fee payer signature and broadcasts:
    (sub-4-second block time, no forks).
 7. Server returns the resource with a Payment-Receipt header.
 
-## Idempotent Response Delivery
+## Idempotent Response Delivery {#idempotent-response-delivery}
 
-Algorand settlement is irreversible: once confirmed, a
-transaction cannot be reversed or charged back. If the
-server broadcasts successfully but fails to deliver the
-response (e.g., server crash, network drop), there is
-no on-chain refund path. The core HTTP Payment
-Authentication Scheme's Idempotency and Concurrent
-Request Handling requirements ({{I-D.httpauth-payment}})
-are therefore the sole recovery mechanism.
+Algorand settlement is irreversible at the protocol level:
+once a transaction is confirmed, it cannot be rolled back
+or charged back by the payer. A refund, if any, requires a
+separate authorized transaction from the recipient; there is
+no protocol-level automatic reversal. Therefore, if the server
+broadcasts a payment transaction successfully but fails before
+delivering the HTTP response, the server's persisted idempotency
+state is the recovery authority for avoiding "paid but not
+served" failures. The core HTTP Payment Authentication Scheme's
+Idempotency and Concurrent Request Handling requirements
+({{I-D.httpauth-payment}}) are therefore the sole recovery
+mechanism.
 
-Servers SHOULD compute the expected TxID from the unsigned
-transaction body (the `txn` field inside the signed
-wrapper, excluding signatures) and persist it together
-with the challenge state **before** broadcasting. This enables
-recovery on retry:
+Servers SHOULD compute the expected canonical `TxID` from the
+decoded unsigned transaction body (`txn` object inside the
+signed transaction wrapper, excluding signature, multisig, and
+LogicSig wrapper fields). The server SHOULD persist this `TxID`,
+the challenge identifier, the idempotency key if present, the
+expected payment parameters, the validity window, and the
+prepared response state before broadcasting.
 
-- **Within validity window**: re-broadcast attempt;
-  algod returns "duplicate" if the original landed,
-  confirming settlement. Server serves the response.
-- **After validity window expiry**: algod rejects with
-  "expired" on broadcast. Server looks up the
-  pre-computed TxID via indexer
-  (`v2/transactions/{txid}`). If found and confirmed,
-  settlement occurred; server serves the response.
-  If not found, the transaction expired without
-  landing; client was not charged; server returns
-  402 with a fresh challenge.
+On retry:
 
-Servers SHOULD prepare the full response payload
-before broadcasting (step 4 above), so that only
-network/transport failures remain after the irreversible
-broadcast step.
+- **Within the validity window**: the server may re-broadcast
+  the same signed transaction or query algod for
+  `/v2/transactions/pending/{txid}`. A successful rebroadcast,
+  an `"already in ledger"` condition, or a pending-transaction
+  response showing `confirmed-round > 0` all indicate that the
+  original payment was accepted or settled. The server then
+  returns the stored response without re-executing the protected
+  operation.
+
+- **After validity-window expiry**: the same transaction can
+  no longer be accepted by the network. The server should look
+  up the precomputed `TxID` using indexer
+  `GET /v2/transactions/{txid}`. If found with a confirmed
+  round, settlement occurred and the server returns the stored
+  response. If not found, the server should account for possible
+  indexer lag with a bounded retry or indeterminate state. Once
+  the lookup is conclusively absent, the transaction expired
+  without landing; the client was not charged, and the server
+  returns `402 Payment Required` with a fresh challenge.
+
+Servers SHOULD prepare the full response payload, or a durable
+pointer to it, before broadcasting. This leaves only transport
+failure after the irreversible broadcast step. For non-idempotent
+operations, servers MUST NOT re-execute side effects when serving
+a retry for the same settled payment credential or idempotency
+key.
 
 ## Client Transaction Construction
 
@@ -1019,7 +1053,7 @@ an asset transfer transaction (`type: axfer`) with:
 - `snd`: the client's Algorand address
 - `arcv`: the `recipient` from the challenge
 - `aamt`: the `amount` from the challenge
-- `xaid`: the `asaId` from `methodDetails`
+- `xaid`: the ASA ID from `currency.id`
 
 The recipient account MUST have already opted in to the
 ASA. If the recipient has not opted in, the transaction
@@ -1033,6 +1067,8 @@ When `feePayer` is `true` in the challenge:
 - The client MUST include an unsigned `pay` transaction
   from `feePayerKey` to itself with `amt` of `0` and
   `fee` set to cover the entire group's pooled fees.
+  The fee payer transaction MUST omit `close`, `aclose`,
+  and `rekey` fields.
   Each transaction's required fee is computed as
   `max(fee_per_byte * txn_size, min_fee)` using values
   from `suggestedParams` or `v2/transactions/params`.
@@ -1213,18 +1249,19 @@ the Algorand protocol rejects duplicate TxIDs and expired
 transactions; the challenge state machine prevents
 credential reuse at the application layer; and the
 required `lease` field provides mutual exclusion between
-distinct transactions covering the same charge. No
-server-side TxID store is required.
+distinct transactions covering the same charge. Durable
+idempotency state for response recovery is described in
+{{idempotent-response-delivery}}.
 
 ## Client-Side Verification
 
 Clients MUST verify the challenge before signing:
 
 1. `amount` is reasonable for the service
-2. `asaId`, if present, identifies a known and trusted
-   asset — clients MUST verify `asaId` against a
+2. `currency.id` identifies a known and trusted
+   asset -- clients MUST verify `currency.id` against a
    trusted registry or allowlist (do NOT rely on
-   `currency` for asset identity, as ASA names are
+   `currency.unitName` for asset identity, as ASA names are
    not unique on Algorand)
 3. `recipient` is the expected party
 4. `feePayerKey`, if present, is the expected server
@@ -1235,9 +1272,9 @@ Clients MUST verify the challenge before signing:
 
 Malicious servers could request excessive amounts,
 direct payments to unexpected recipients, or specify
-a fraudulent `asaId` paired with a recognizable
-`currency` label (e.g., `currency: "USDC"` with a
-malicious `asaId`).
+a fraudulent `currency.id` paired with a recognizable
+`currency.unitName` label (e.g., `unitName: "USDC"` with
+a malicious ASA ID).
 
 ## Dangerous Transaction Fields
 
@@ -1291,7 +1328,7 @@ Fee Payer Transaction Manipulation
   that transfers funds FROM the server's fee payer
   account. Servers MUST verify the fee payer transaction
   contains only a zero-amount self-payment with
-  reasonable fees and no `close` or `rekey` fields
+  reasonable fees and no `close`, `aclose`, or `rekey` fields
   (see {{fee-payer-verification}}).
 
 ## Asset Opt-In
@@ -1404,7 +1441,10 @@ Decoded `request`:
 ~~~json
 {
   "amount": "10000000",
-  "currency": "ALGO",
+  "currency": {
+    "id": "0",
+    "unitName": "ALGO"
+  },
   "recipient": "7XKXTG2CW87D97TXJSDPBD5JBKHETQA83TZRUJ\
 OSGASU",
   "description": "Weather API access",
@@ -1481,14 +1521,16 @@ Decoded `request`:
 ~~~json
 {
   "amount": "5000000",
-  "currency": "USDC",
+  "currency": {
+    "id": "31566704",
+    "unitName": "USDC"
+  },
   "recipient": "7XKXTG2CW87D97TXJSDPBD5JBKHETQA83TZRUJ\
 OSGASU",
   "description": "Premium API call",
   "methodDetails": {
     "network": "algorand:wGHE2Pwdvd7S12BL5FaOP20EGYes\
 N73ktiC1qzkkit8=",
-    "asaId": "31566704",
     "challengeReference": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "lease": "Yk3pR8wN5vB2mQ7jT1tX9cA6eF4gD0iL\
 sU3oK8nM1bZ=",
